@@ -1,14 +1,4 @@
-<!doctype html>
-<html lang="pt">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#171d15">
-<title>Quinta</title>
-<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}body{margin:0}[hidden]{display:none!important}</style>
-</head>
-<body>
-<link rel="preconnect" href="https://fonts.googleapis.com">
+<!doctype html><html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#171d15"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Quinta"><meta name="description" content="Portões, câmaras e luzes da quinta num só mapa."><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icone-180.png"><link rel="icon" type="image/png" href="icone-192.png"><title>Quinta</title><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}body{margin:0;background:#171d15}[hidden]{display:none!important}</style></head><body><link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap">
 <style>
@@ -124,7 +114,8 @@ button:focus-visible, [role="switch"]:focus-visible { outline: 2px solid var(--a
   backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2);
   pointer-events: auto; overflow: hidden; display: flex; flex-direction: column; max-height: 48vh;
 }
-.separadores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 8px 8px 0; }
+.separadores { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 8px 8px 0; }
+.avatar { background: rgba(242, 196, 109, 0.12); border-color: color-mix(in srgb, var(--amber) 40%, transparent); color: var(--amber); font-family: var(--display); font-weight: 700; font-size: 0.95rem; }
 .sep {
   height: 36px; border-radius: 12px; border: 0; background: transparent; color: var(--muted);
   font-weight: 700; font-size: 0.86rem; cursor: pointer;
@@ -524,6 +515,7 @@ button:focus-visible, [role="switch"]:focus-visible { outline: 2px solid var(--a
     <button class="icone-btn" id="recentrar" type="button" aria-label="Voltar à casa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/><path d="M10.5 19v-4.5h3V19"/></svg>
     </button>
+    <button class="icone-btn avatar" id="conta" type="button" aria-label="Conta"><span id="iniciais">·</span></button>
   </div>
 </header>
 
@@ -865,11 +857,17 @@ button:focus-visible, [role="switch"]:focus-visible { outline: 2px solid var(--a
     if (p && voar) voarPara(p.cx, p.cy, Math.max(s, sMin * 2.6));
   }
   document.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => { const p = portoes[c.dataset.portao]; selecionarPortao(selecionado === p ? null : p, selecionado !== p); }));
-  acao.addEventListener("click", () => selecionado && alternar(selecionado));
+  acao.addEventListener("click", () => {
+    if (!selecionado) return;
+    if (!perm.portoes.includes(selecionado.id)) { aviso({ ic: "info", t: "Sem acesso a este portão", d: "Pede ao administrador para te dar acesso.", dur: 3600 }); return; }
+    alternar(selecionado);
+  });
 
   // ================= separadores =================
+  let perm = { camaras: true, auto: true, portoes: ["portao-1", "portao-2"] };
   const SEPS = { portoes: "p-portoes", camaras: "p-camaras", auto: "p-auto" };
   function abrirSep(nome) {
+    if ((nome === "camaras" && !perm.camaras) || (nome === "auto" && !perm.auto)) nome = "portoes";
     Object.entries(SEPS).forEach(([k, id]) => {
       document.getElementById(`sep-${k}`).setAttribute("aria-selected", String(k === nome));
       document.getElementById(id).hidden = k !== nome;
@@ -932,7 +930,7 @@ button:focus-visible, [role="switch"]:focus-visible { outline: 2px solid var(--a
     const parte = abertos === 0 ? "2 portões fechados" : abertos === 2 ? "2 portões abertos" : "1 portão aberto";
     const alerta = CAMS.some((c) => c.alerta);
     document.getElementById("resumo").textContent =
-      `${eNoite ? "Noite" : "Dia"}${relogio ? " · " + relogio : ""} · ${parte} · ${alerta ? "alerta ativo" : "3 câmaras ativas"}`;
+      `${eNoite ? "Noite" : "Dia"}${relogio ? " · " + relogio : ""} · ${parte} · ${alerta ? "alerta ativo" : perm.camaras ? "3 câmaras ativas" : "acesso aos portões"}`;
   }
 
   // ================= avisos =================
@@ -1127,7 +1125,7 @@ button:focus-visible, [role="switch"]:focus-visible { outline: 2px solid var(--a
       }
       if (d < dmin) { dmin = d; melhor = { tipo: "p", v: p }; }
     });
-    CAMS.forEach((c) => { const e = paraEcra(c.x, c.y), d = Math.hypot(e.x - px, e.y - py); if (d < dmin) { dmin = d; melhor = { tipo: "c", v: c }; } });
+    if (perm.camaras) CAMS.forEach((c) => { const e = paraEcra(c.x, c.y), d = Math.hypot(e.x - px, e.y - py); if (d < dmin) { dmin = d; melhor = { tipo: "c", v: c }; } });
     if (melhor && dmin < 36) {
       if (melhor.tipo === "p") { abrirSep("portoes"); selecionarPortao(melhor.v, true); }
       else { abrirSep("camaras"); selecionarCam(melhor.v); }
@@ -1152,8 +1150,636 @@ button:focus-visible, [role="switch"]:focus-visible { outline: 2px solid var(--a
   });
   document.addEventListener("visibilitychange", () => { patrulha = !document.hidden && !reduz; });
   arrancar();
+
+  // ================= perfis de acesso (usado pelo ecrã de entrada) =================
+  function aplicarPerfil(p) {
+    perm = { camaras: !!p.camaras, auto: !!p.auto, portoes: [...p.portoes] };
+    pararCenario(); fimSim();
+    document.getElementById("sep-camaras").hidden = !perm.camaras;
+    document.getElementById("sep-auto").hidden = !perm.auto;
+    gCones.style.display = perm.camaras ? "" : "none";
+    gCams.style.display = perm.camaras ? "" : "none";
+    if (camSel) selecionarCam(null);
+    abrirSep("portoes");
+    Object.values(portoes).forEach((q) => {
+      const chip = document.getElementById(`chip-${q.id}`);
+      chip.hidden = !perm.portoes.includes(q.id);
+    });
+    if (selecionado && !perm.portoes.includes(selecionado.id)) selecionarPortao(null, false);
+    atualizarResumo();
+  }
+  window.quinta = { aplicarPerfil, aviso, parar: () => { pararCenario(); fimSim(); } };
 })();
 </script>
 
-</body>
-</html>
+
+<style>
+/* ---------- entrada, contas e desbloqueio rápido ---------- */
+[hidden] { display: none !important; }
+#avisos { z-index: 28; }
+.auth {
+  position: fixed; inset: 0; z-index: 30; overflow-y: auto;
+  background: radial-gradient(120% 70% at 50% -10%, #263321 0%, var(--bg) 62%);
+  display: flex; justify-content: center;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 28px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.auth-cartao { width: 100%; max-width: 380px; margin: auto 0; display: flex; flex-direction: column; gap: 22px; }
+.marca-auth { display: flex; align-items: center; gap: 12px; }
+.marca-auth svg { width: 46px; height: 46px; flex: none; }
+.marca-auth span { font-family: var(--display); font-weight: 700; font-size: 1.9rem; letter-spacing: -0.02em; }
+.auth h2 { margin: 0; font-family: var(--display); font-size: 1.45rem; line-height: 1.15; text-wrap: balance; }
+.auth .sub { margin: 6px 0 0; color: var(--muted); font-size: 0.92rem; line-height: 1.45; }
+.auth form, .auth section { display: flex; flex-direction: column; gap: 14px; }
+.campo { display: flex; flex-direction: column; gap: 6px; }
+.campo label { font-size: 0.8rem; font-weight: 700; color: var(--muted); letter-spacing: 0.02em; }
+.campo input, .campo select {
+  height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line);
+  background: rgba(241, 235, 221, 0.05); color: var(--text); font: inherit; font-size: 1rem;
+}
+.campo input:focus, .campo select:focus { outline: 2px solid color-mix(in srgb, var(--amber) 70%, transparent); outline-offset: 1px; }
+.campo .ajuda { font-size: 0.78rem; color: var(--muted); }
+.btn-prim {
+  height: 52px; border-radius: 999px; border: 0; background: var(--amber); color: var(--amber-ink);
+  font-family: var(--display); font-weight: 700; font-size: 1.05rem; cursor: pointer;
+}
+.btn-prim:disabled { opacity: 0.6; }
+.btn-sec { height: 48px; border-radius: 999px; border: 1px solid var(--line); background: rgba(241, 235, 221, 0.04); font-weight: 700; cursor: pointer; }
+.ligacao { align-self: center; background: none; border: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 6px; font-size: 0.88rem; }
+.erro { margin: 0; min-height: 1.2em; color: var(--alerta); font-size: 0.86rem; }
+.nota-demo { margin: 0; font-size: 0.76rem; color: var(--muted); text-align: center; }
+
+/* PIN */
+.pin-topo { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.pin-avatar { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: rgba(242, 196, 109, 0.14); color: var(--amber); font-family: var(--display); font-weight: 700; font-size: 1.5rem; }
+.pontos { display: flex; justify-content: center; gap: 18px; margin: 4px 0; }
+.pontos span { width: 14px; height: 14px; border-radius: 50%; border: 1.6px solid var(--muted); transition: background 0.12s, border-color 0.12s; }
+.pontos span.cheio { background: var(--text); border-color: var(--text); }
+.pontos.abana { animation: abana 0.36s; }
+@keyframes abana { 20%, 60% { transform: translateX(-9px); } 40%, 80% { transform: translateX(9px); } }
+.teclado { display: grid; grid-template-columns: repeat(3, 76px); gap: 14px 26px; justify-content: center; }
+.tecla {
+  width: 76px; height: 76px; border-radius: 50%; border: 0; background: rgba(241, 235, 221, 0.08);
+  font-family: var(--display); font-size: 1.7rem; font-weight: 500; cursor: pointer; display: grid; place-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.tecla:active { background: rgba(241, 235, 221, 0.2); }
+.tecla.vazia { background: transparent; }
+.tecla.icone { background: transparent; color: var(--text); }
+.tecla.icone svg { width: 30px; height: 30px; }
+.tecla[hidden] { display: grid !important; visibility: hidden; }
+
+/* folhas (conta, utilizadores, instalar) */
+.folha { position: fixed; inset: 0; z-index: 25; display: flex; align-items: flex-end; justify-content: center; background: rgba(5, 8, 5, 0.55); }
+.folha-in {
+  width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; background: #1b2218; border: 1px solid var(--line); border-bottom: 0;
+  border-radius: 22px 22px 0 0; padding: 18px max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 18px) max(16px, env(safe-area-inset-left, 0px));
+  display: flex; flex-direction: column; gap: 14px; animation: sobe 0.24s ease-out;
+}
+@keyframes sobe { from { transform: translateY(24px); opacity: 0; } }
+.folha-cab { display: flex; align-items: center; gap: 12px; }
+.folha-cab h2 { margin: 0; flex: 1; font-family: var(--display); font-size: 1.25rem; }
+.fechar { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: transparent; cursor: pointer; display: grid; place-items: center; }
+.fechar svg { width: 16px; height: 16px; }
+.conta-id { display: flex; align-items: center; gap: 14px; }
+.conta-id .pin-avatar { width: 52px; height: 52px; font-size: 1.2rem; }
+.conta-id b { font-family: var(--display); font-size: 1.1rem; display: block; }
+.conta-id span { color: var(--muted); font-size: 0.85rem; }
+.menu { display: flex; flex-direction: column; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); }
+.menu button {
+  display: flex; align-items: center; gap: 12px; padding: 14px; border: 0; border-top: 1px solid rgba(58, 69, 50, 0.7);
+  background: rgba(241, 235, 221, 0.03); text-align: left; cursor: pointer; font-size: 0.95rem;
+}
+.menu button:first-child { border-top: 0; }
+.menu button svg { width: 20px; height: 20px; flex: none; color: var(--muted); }
+.menu button .estado { margin-left: auto; color: var(--muted); font-size: 0.82rem; }
+.menu button.perigo { color: var(--alerta); }
+.menu button.perigo svg { color: var(--alerta); }
+
+.utilizadores { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.u-linha { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-top: 1px solid rgba(58, 69, 50, 0.7); }
+.u-linha:first-child { border-top: 0; }
+.u-linha .pin-avatar { width: 40px; height: 40px; font-size: 0.95rem; }
+.u-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.u-txt b { font-size: 0.95rem; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.u-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tu { font-style: normal; font-size: 0.7rem; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 6px; }
+.u-det { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.u-mais { font-size: 0.8rem; color: var(--muted); }
+.perfil-pill { font-size: 0.64rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; background: rgba(127, 211, 230, 0.12); color: var(--cam); white-space: nowrap; }
+.perfil-pill.admin { background: rgba(242, 196, 109, 0.14); color: var(--amber); }
+.perfil-pill.expirado { background: rgba(255, 122, 102, 0.14); color: var(--alerta); }
+.u-editar { height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; cursor: pointer; font-size: 0.82rem; font-weight: 700; }
+.form-u { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: rgba(241, 235, 221, 0.03); }
+.form-u h3 { margin: 0; font-family: var(--display); font-size: 1.05rem; }
+.form-acoes { display: flex; gap: 10px; flex-wrap: wrap; }
+.form-acoes .btn-prim { flex: 1; height: 46px; min-width: 140px; }
+.form-acoes .btn-sec { height: 46px; padding: 0 16px; }
+.btn-remover { height: 46px; padding: 0 16px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--alerta) 50%, transparent); background: transparent; color: var(--alerta); font-weight: 700; cursor: pointer; }
+.passos { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; color: var(--text); font-size: 0.95rem; line-height: 1.45; }
+.passos b { font-family: var(--display); }
+.icone-partilha { display: inline-block; width: 18px; height: 18px; vertical-align: -3px; color: var(--cam); }
+</style>
+
+<!-- ======================= ecrãs de entrada ======================= -->
+<div class="auth" id="auth" hidden>
+  <div class="auth-cartao">
+    <div class="marca-auth">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#2a3524"/><path d="M14 50V24M50 50V24" stroke="#f2c46d" stroke-width="4" stroke-linecap="round"/><path d="M18 30q14-9 28 0" fill="none" stroke="#f2c46d" stroke-width="3.2" stroke-linecap="round"/><path d="M22 28v22M27 26v24M32 25.5v24.5M37 26v24M42 28v22" stroke="#f2c46d" stroke-width="2.6" stroke-linecap="round"/><path d="M18 40h28" stroke="#f2c46d" stroke-width="2.6" stroke-linecap="round"/></svg>
+      <span>Quinta</span>
+    </div>
+
+    <!-- 1. primeira configuração -->
+    <form id="f-config" hidden novalidate>
+      <div><h2>Configuração inicial</h2><p class="sub">Cria a conta de administrador. É com ela que vais dar acesso às outras pessoas.</p></div>
+      <div class="campo"><label for="c-nome">Nome</label><input id="c-nome" autocomplete="name" required></div>
+      <div class="campo"><label for="c-user">Utilizador</label><input id="c-user" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>
+      <div class="campo"><label for="c-pass">Palavra-passe</label><input id="c-pass" type="password" autocomplete="new-password" required><span class="ajuda">Pelo menos 6 caracteres.</span></div>
+      <div class="campo"><label for="c-pass2">Repetir palavra-passe</label><input id="c-pass2" type="password" autocomplete="new-password" required></div>
+      <p class="erro" id="c-erro"></p>
+      <button class="btn-prim" type="submit">Criar conta e entrar</button>
+    </form>
+
+    <!-- 2. login -->
+    <form id="f-login" hidden novalidate>
+      <div><h2>Entrar</h2><p class="sub">Usa a conta que o administrador criou para ti.</p></div>
+      <div class="campo"><label for="l-user">Utilizador</label><input id="l-user" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>
+      <div class="campo"><label for="l-pass">Palavra-passe</label><input id="l-pass" type="password" autocomplete="current-password" required></div>
+      <p class="erro" id="l-erro"></p>
+      <button class="btn-prim" type="submit">Entrar</button>
+    </form>
+
+    <!-- 3. PIN: definir, confirmar ou entrar -->
+    <section id="s-pin" hidden aria-live="polite">
+      <div class="pin-topo">
+        <div class="pin-avatar" id="pin-avatar">·</div>
+        <h2 id="pin-titulo">Olá</h2>
+        <p class="sub" id="pin-sub">Introduz o teu PIN</p>
+      </div>
+      <div class="pontos" id="pontos" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <p class="erro" id="pin-erro" style="text-align:center"></p>
+      <div class="teclado" id="teclado">
+        <button class="tecla" type="button" data-d="1">1</button><button class="tecla" type="button" data-d="2">2</button><button class="tecla" type="button" data-d="3">3</button>
+        <button class="tecla" type="button" data-d="4">4</button><button class="tecla" type="button" data-d="5">5</button><button class="tecla" type="button" data-d="6">6</button>
+        <button class="tecla" type="button" data-d="7">7</button><button class="tecla" type="button" data-d="8">8</button><button class="tecla" type="button" data-d="9">9</button>
+        <button class="tecla icone" type="button" id="tecla-bio" aria-label="Entrar com Face ID" hidden>
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10V7a3 3 0 0 1 3-3h3M22 4h3a3 3 0 0 1 3 3v3M28 22v3a3 3 0 0 1-3 3h-3M10 28H7a3 3 0 0 1-3-3v-3"/><path d="M11 12v2M21 12v2M16 12v6l-1.5 1M12 22q4 3 8 0"/></svg>
+        </button>
+        <button class="tecla" type="button" data-d="0">0</button>
+        <button class="tecla icone" type="button" id="tecla-apagar" aria-label="Apagar">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H12l-8-8z"/><path d="m15 13 6 6M21 13l-6 6"/></svg>
+        </button>
+      </div>
+      <button class="ligacao" type="button" id="pin-outro">Entrar com palavra-passe</button>
+    </section>
+
+    <!-- 4. ativar Face ID -->
+    <section id="s-bio" hidden>
+      <div class="pin-topo">
+        <div class="pin-avatar"><svg viewBox="0 0 32 32" width="34" height="34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10V7a3 3 0 0 1 3-3h3M22 4h3a3 3 0 0 1 3 3v3M28 22v3a3 3 0 0 1-3 3h-3M10 28H7a3 3 0 0 1-3-3v-3"/><path d="M11 12v2M21 12v2M16 12v6l-1.5 1M12 22q4 3 8 0"/></svg></div>
+        <h2 id="bio-titulo">Entrar com Face ID?</h2>
+        <p class="sub" id="bio-sub">Da próxima vez que abrires a app, basta olhares para o telemóvel. O PIN fica como alternativa.</p>
+      </div>
+      <p class="erro" id="bio-erro" style="text-align:center"></p>
+      <button class="btn-prim" type="button" id="bio-ativar">Ativar Face ID</button>
+      <button class="ligacao" type="button" id="bio-agora-nao">Agora não</button>
+    </section>
+
+    <p class="nota-demo" id="nota-demo">Demonstração: as contas ficam guardadas só neste dispositivo.</p>
+  </div>
+</div>
+
+<!-- ======================= folha: conta ======================= -->
+<div class="folha" id="folha-conta" hidden>
+  <div class="folha-in" role="dialog" aria-modal="true" aria-labelledby="conta-nome">
+    <div class="folha-cab">
+      <div class="conta-id"><div class="pin-avatar" id="conta-avatar">·</div><div><b id="conta-nome">—</b><span id="conta-perfil">—</span></div></div>
+      <span style="flex:1"></span>
+      <button class="fechar" type="button" data-fechar aria-label="Fechar"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l10 10M13 3 3 13"/></svg></button>
+    </div>
+    <div class="menu">
+      <button type="button" id="m-utilizadores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></svg>Utilizadores e acessos</button>
+      <button type="button" id="m-rapido"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Entrada rápida<span class="estado" id="m-rapido-estado">—</span></button>
+      <button type="button" id="m-instalar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M12 7v7M9 11l3 3 3-3"/></svg>Instalar no telemóvel</button>
+      <button type="button" id="m-bloquear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/></svg>Bloquear agora</button>
+      <button type="button" class="perigo" id="m-sair"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 8l-4 4 4 4M6 12h10"/></svg>Terminar sessão</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= folha: utilizadores (administrador) ======================= -->
+<div class="folha" id="folha-admin" hidden>
+  <div class="folha-in" role="dialog" aria-modal="true" aria-labelledby="admin-t">
+    <div class="folha-cab">
+      <h2 id="admin-t">Utilizadores e acessos</h2>
+      <button class="fechar" type="button" data-fechar aria-label="Fechar"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l10 10M13 3 3 13"/></svg></button>
+    </div>
+    <p class="sub" style="margin:0;color:var(--muted);font-size:0.86rem">Cria contas e escolhe o que cada pessoa pode fazer. Um convidado só tem acesso até à data que escolheres.</p>
+    <div class="utilizadores" id="lista-u"></div>
+    <button class="btn-sec" type="button" id="u-novo">+ Novo utilizador</button>
+    <form class="form-u" id="form-u" hidden novalidate>
+      <h3 id="fu-titulo">Novo utilizador</h3>
+      <div class="campo"><label for="fu-nome">Nome</label><input id="fu-nome" required></div>
+      <div class="campo"><label for="fu-user">Utilizador</label><input id="fu-user" autocapitalize="none" spellcheck="false" required></div>
+      <div class="campo"><label for="fu-pass" id="fu-pass-l">Palavra-passe</label><input id="fu-pass" type="password" autocomplete="new-password"><span class="ajuda" id="fu-pass-a">Pelo menos 6 caracteres. Dá-a à pessoa em mão.</span></div>
+      <div class="campo"><label for="fu-perfil">Perfil</label>
+        <select id="fu-perfil">
+          <option value="familia">Família</option><option value="funcionario">Funcionário</option>
+          <option value="convidado">Convidado</option><option value="admin">Administrador</option>
+        </select>
+        <span class="ajuda" id="fu-perfil-desc"></span>
+      </div>
+      <div class="campo" id="fu-validade-c" hidden><label for="fu-validade">Acesso válido até</label><input id="fu-validade" type="date"></div>
+      <p class="erro" id="fu-erro"></p>
+      <div class="form-acoes">
+        <button class="btn-prim" type="submit" id="fu-guardar">Criar utilizador</button>
+        <button class="btn-sec" type="button" id="fu-cancelar">Cancelar</button>
+        <button class="btn-remover" type="button" id="fu-remover" hidden>Remover</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ======================= folha: instalar ======================= -->
+<div class="folha" id="folha-instalar" hidden>
+  <div class="folha-in" role="dialog" aria-modal="true" aria-labelledby="inst-t">
+    <div class="folha-cab">
+      <h2 id="inst-t">Instalar no telemóvel</h2>
+      <button class="fechar" type="button" data-fechar aria-label="Fechar"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l10 10M13 3 3 13"/></svg></button>
+    </div>
+    <ol class="passos" id="passos-android" hidden>
+      <li>Abre esta página no <b>Chrome</b>.</li>
+      <li>No menu <b>⋮</b>, toca em <b>Instalar app</b> (ou <b>Adicionar ao ecrã principal</b>).</li>
+      <li>Abre a <b>Quinta</b> pelo ícone novo, entra uma vez e ativa o PIN e a biometria.</li>
+    </ol>
+    <ol class="passos" id="passos-ios">
+      <li>Abre esta página no <b>Safari</b>.</li>
+      <li>Toca em <b>Partilhar</b> <svg class="icone-partilha" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg> e depois em <b>Adicionar ao ecrã principal</b>.</li>
+      <li>Abre a <b>Quinta</b> pelo ícone novo e entra uma vez com a tua conta.</li>
+      <li>Ativa o PIN e o Face ID. A partir daí, entras só com eles.</li>
+    </ol>
+    <p class="sub" id="inst-nota" style="margin:0;color:var(--muted);font-size:0.84rem">No iPhone, a app instalada guarda a sessão à parte do Safari, por isso o primeiro login é feito já dentro da app.</p>
+    <button class="btn-prim" type="button" id="inst-android" hidden>Instalar agora</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const app = window.quinta;
+  const CHAVE = "quinta.contas.v1";
+  const PERFIS = {
+    admin: { nome: "Administrador", desc: "Tudo, incluindo criar e gerir contas.", camaras: true, auto: true, portoes: ["portao-1", "portao-2"], admin: true },
+    familia: { nome: "Família", desc: "Portões, câmaras e automações.", camaras: true, auto: true, portoes: ["portao-1", "portao-2"] },
+    funcionario: { nome: "Funcionário", desc: "Abre os dois portões. Sem câmaras nem automações.", camaras: false, auto: false, portoes: ["portao-1", "portao-2"] },
+    convidado: { nome: "Convidado", desc: "Só o Portão 1, até à data que escolheres.", camaras: false, auto: false, portoes: ["portao-1"] },
+  };
+  const MAX_FALHAS = 5, BLOQUEIO_MS = 60 * 1000;
+  const ehIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const NOME_BIO = ehIOS ? "Face ID" : /Mac/.test(navigator.platform) ? "Touch ID" : "desbloqueio biométrico";
+  const BIO_CURTO = ehIOS ? "Face ID" : /Mac/.test(navigator.platform) ? "Touch ID" : "Biometria";
+  const cap = (s) => s[0].toUpperCase() + s.slice(1);
+  const instalada = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
+  // ---------------- armazenamento (só neste dispositivo, nesta demonstração) ----------------
+  let memoria = null;
+  function ler() {
+    try { const v = localStorage.getItem(CHAVE); if (v) return JSON.parse(v); } catch (_) {}
+    return memoria || { utilizadores: [], sessao: null, rapido: {} };
+  }
+  let dados = ler();
+  function gravar() { memoria = dados; try { localStorage.setItem(CHAVE, JSON.stringify(dados)); } catch (_) {} }
+
+  // ---------------- cripto: palavra-passe e PIN nunca guardados em claro ----------------
+  const enc = new TextEncoder();
+  const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const deB64 = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+  const aleatorio = (n) => crypto.getRandomValues(new Uint8Array(n));
+  async function derivar(segredo, saltB64) {
+    const k = await crypto.subtle.importKey("raw", enc.encode(segredo), "PBKDF2", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: deB64(saltB64), iterations: 150000, hash: "SHA-256" }, k, 256);
+    return b64(bits);
+  }
+  async function novoHash(segredo) { const salt = b64(aleatorio(16)); return { salt, hash: await derivar(segredo, salt) }; }
+  async function confere(segredo, reg) { return reg && (await derivar(segredo, reg.salt)) === reg.hash; }
+
+  // ---------------- utilitários ----------------
+  const iniciais = (n) => (n || "?").trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  const normal = (u) => (u || "").trim().toLowerCase();
+  const porId = (id) => dados.utilizadores.find((u) => u.id === id);
+  const hoje = () => new Date().toISOString().slice(0, 10);
+  const expirado = (u) => u.perfil === "convidado" && u.validade && u.validade < hoje();
+  const atual = () => (dados.sessao ? porId(dados.sessao.uid) : null);
+  const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const fmtData = (iso) => { const d = new Date(iso.length === 10 ? iso + "T12:00" : iso); return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`; };
+
+  const ECRAS = ["f-config", "f-login", "s-pin", "s-bio"];
+  function mostrar(id) {
+    $("auth").hidden = !id;
+    ECRAS.forEach((e) => ($(e).hidden = e !== id));
+    if (id === "f-login") setTimeout(() => $("l-user").focus(), 50);
+    if (id === "f-config") setTimeout(() => $("c-nome").focus(), 50);
+  }
+
+  function entrarNaApp() {
+    const u = atual();
+    if (pedidoBio) { pedidoBio.abort(); pedidoBio = null; }
+    mostrar(null);
+    $("iniciais").textContent = iniciais(u.nome);
+    app.aplicarPerfil(PERFIS[u.perfil] || PERFIS.funcionario);
+    u.ultimo = new Date().toISOString(); gravar();
+    ultimaAtividade = Date.now();
+  }
+
+  // ---------------- 1. configuração inicial ----------------
+  $("f-config").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const nome = $("c-nome").value.trim(), user = normal($("c-user").value), p1 = $("c-pass").value, p2 = $("c-pass2").value;
+    const erro = (t) => ($("c-erro").textContent = t);
+    if (!nome || !user) return erro("Preenche o nome e o utilizador.");
+    if (p1.length < 6) return erro("A palavra-passe precisa de pelo menos 6 caracteres.");
+    if (p1 !== p2) return erro("As palavras-passe não coincidem.");
+    const u = { id: b64(aleatorio(9)), nome, user, perfil: "admin", criado: new Date().toISOString(), senha: await novoHash(p1) };
+    dados.utilizadores.push(u); dados.sessao = { uid: u.id, desde: Date.now() }; gravar();
+    pedirRapido();
+  });
+
+  // ---------------- 2. login ----------------
+  $("f-login").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const user = normal($("l-user").value), pass = $("l-pass").value;
+    const erro = (t) => ($("l-erro").textContent = t);
+    const u = dados.utilizadores.find((x) => x.user === user);
+    if (!u || !(await confere(pass, u.senha))) return erro("Utilizador ou palavra-passe errados.");
+    if (expirado(u)) return erro(`O acesso desta conta terminou a ${fmtData(u.validade)}.`);
+    erro(""); $("l-pass").value = "";
+    dados.sessao = { uid: u.id, desde: Date.now() };
+    if (dados.rapido[u.id]) dados.rapido[u.id].falhas = 0;
+    gravar();
+    if (dados.rapido[u.id]?.pin) entrarNaApp(); else pedirRapido();
+  });
+
+  // ---------------- 3. PIN ----------------
+  let modoPin = "entrar", pin = "", pinNovo = "";
+  function abrirPin(modo) {
+    modoPin = modo; pin = ""; pintar();
+    const u = atual();
+    $("pin-avatar").textContent = iniciais(u?.nome);
+    $("pin-erro").textContent = "";
+    if (modo === "entrar") {
+      $("pin-titulo").textContent = `Olá, ${(u?.nome || "").split(" ")[0]}`;
+      $("pin-sub").textContent = dados.rapido[u.id]?.cred ? `Usa o ${NOME_BIO} ou o teu PIN` : "Introduz o teu PIN";
+      $("pin-outro").textContent = "Entrar com palavra-passe";
+    } else if (modo === "definir") {
+      $("pin-titulo").textContent = "Escolhe um PIN";
+      $("pin-sub").textContent = "4 dígitos para entrares depressa nas próximas vezes.";
+      $("pin-outro").textContent = "Agora não";
+    } else {
+      $("pin-titulo").textContent = "Confirma o PIN";
+      $("pin-sub").textContent = "Escreve o mesmo PIN outra vez.";
+      $("pin-outro").textContent = "Começar de novo";
+    }
+    $("tecla-bio").hidden = !(modo === "entrar" && dados.rapido[u.id]?.cred);
+    $("tecla-bio").setAttribute("aria-label", `Entrar com ${NOME_BIO}`);
+    mostrar("s-pin");
+  }
+  function pintar() { [...$("pontos").children].forEach((s, i) => s.classList.toggle("cheio", i < pin.length)); }
+  function abanar(msg) {
+    $("pin-erro").textContent = msg; pin = ""; pintar();
+    const p = $("pontos"); p.classList.remove("abana"); void p.offsetWidth; p.classList.add("abana");
+    try { navigator.vibrate && navigator.vibrate(80); } catch (_) {}
+  }
+  async function pinCompleto() {
+    const u = atual();
+    if (modoPin === "definir") { pinNovo = pin; return abrirPin("confirmar"); }
+    if (modoPin === "confirmar") {
+      if (pin !== pinNovo) { abrirPin("definir"); return abanar("Os PIN não coincidem. Tenta outra vez."); }
+      dados.rapido[u.id] = { ...(dados.rapido[u.id] || {}), pin: await novoHash(pin), falhas: 0 }; gravar();
+      pinNovo = "";
+      return (await bioDisponivel()) && !dados.rapido[u.id].cred ? mostrarBio() : entrarNaApp();
+    }
+    // entrar
+    const r = dados.rapido[u.id];
+    if (await confere(pin, r.pin)) { r.falhas = 0; gravar(); return entrarNaApp(); }
+    r.falhas = (r.falhas || 0) + 1; gravar();
+    if (r.falhas >= MAX_FALHAS) { dados.sessao = null; r.falhas = 0; gravar(); mostrar("f-login"); $("l-erro").textContent = "Demasiadas tentativas. Entra com a palavra-passe."; return; }
+    abanar(`PIN errado. ${MAX_FALHAS - r.falhas} tentativa${MAX_FALHAS - r.falhas === 1 ? "" : "s"} antes de pedir a palavra-passe.`);
+  }
+  $("teclado").addEventListener("click", (e) => {
+    const t = e.target.closest("[data-d]");
+    if (!t || pin.length >= 4) return;
+    $("pin-erro").textContent = "";
+    pin += t.dataset.d; pintar();
+    if (pin.length === 4) setTimeout(pinCompleto, 120);
+  });
+  $("tecla-apagar").addEventListener("click", () => { pin = pin.slice(0, -1); pintar(); });
+  document.addEventListener("keydown", (e) => {
+    if ($("s-pin").hidden || $("auth").hidden) return;
+    if (/^[0-9]$/.test(e.key) && pin.length < 4) { pin += e.key; pintar(); if (pin.length === 4) setTimeout(pinCompleto, 120); }
+    else if (e.key === "Backspace") { pin = pin.slice(0, -1); pintar(); }
+  });
+  $("pin-outro").addEventListener("click", () => {
+    if (modoPin === "entrar") { dados.sessao = null; gravar(); mostrar("f-login"); }
+    else if (modoPin === "definir") entrarNaApp();
+    else abrirPin("definir");
+  });
+
+  // ---------------- 4. Face ID (WebAuthn, autenticador do próprio telemóvel) ----------------
+  async function bioDisponivel() {
+    try { return !!(window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); } catch (_) { return false; }
+  }
+  function mostrarBio() {
+    $("bio-titulo").textContent = `Entrar com ${NOME_BIO}?`;
+    $("bio-sub").textContent = NOME_BIO === "Face ID"
+      ? "Da próxima vez que abrires a app, basta olhares para o telemóvel. O PIN fica como alternativa."
+      : `Da próxima vez que abrires a app, entras com ${NOME_BIO}. O PIN fica como alternativa.`;
+    $("bio-ativar").textContent = `Ativar ${NOME_BIO}`;
+    $("bio-erro").textContent = "";
+    mostrar("s-bio");
+  }
+  $("bio-ativar").addEventListener("click", async () => {
+    const u = atual();
+    try {
+      const cred = await navigator.credentials.create({ publicKey: {
+        challenge: aleatorio(32), rp: { name: "Quinta" },
+        user: { id: aleatorio(16), name: u.user, displayName: u.nome },
+        pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+        authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required", residentKey: "discouraged" },
+        timeout: 60000, attestation: "none",
+      } });
+      dados.rapido[u.id] = { ...(dados.rapido[u.id] || {}), cred: b64(cred.rawId) }; gravar();
+      entrarNaApp();
+      app.aviso({ ic: "info", t: `${cap(NOME_BIO)} ativo`, d: "Da próxima vez entras sem palavra-passe.", dur: 3600 });
+    } catch (err) {
+      $("bio-erro").textContent = err && err.name === "NotAllowedError" ? "Cancelado. Podes ativar mais tarde no menu da conta." : `Não foi possível ativar o ${NOME_BIO} neste dispositivo.`;
+    }
+  });
+  $("bio-agora-nao").addEventListener("click", () => entrarNaApp());
+  let pedidoBio = null;
+  async function entrarComBio(silencioso) {
+    const u = atual(), r = u && dados.rapido[u.id];
+    if (!r?.cred) return;
+    if (pedidoBio) pedidoBio.abort();
+    const ctl = (pedidoBio = new AbortController());
+    try {
+      await navigator.credentials.get({ signal: ctl.signal, publicKey: {
+        challenge: aleatorio(32), timeout: 60000, userVerification: "required",
+        allowCredentials: [{ type: "public-key", id: deB64(r.cred), transports: ["internal"] }],
+      } });
+      if (pedidoBio !== ctl || $("s-pin").hidden || modoPin !== "entrar") return;
+      r.falhas = 0; gravar(); entrarNaApp();
+    } catch (err) {
+      if (silencioso || pedidoBio !== ctl || (err && err.name === "AbortError")) return;
+      $("pin-erro").textContent = err && err.name === "NotAllowedError" ? `${cap(NOME_BIO)} cancelado. Usa o PIN.` : `${cap(NOME_BIO)} indisponível. Usa o PIN.`;
+    } finally { if (pedidoBio === ctl) pedidoBio = null; }
+  }
+  $("tecla-bio").addEventListener("click", () => entrarComBio(false));   // no iPhone o toque garante que o Face ID aparece
+  function abrirPinComBio() { abrirPin("entrar"); entrarComBio(true); }   // tenta logo ao abrir; se o telemóvel não deixar, fica o PIN
+
+  function pedirRapido() { abrirPin("definir"); }
+
+  // ---------------- bloqueio automático ----------------
+  let ultimaAtividade = Date.now(), escondidaDesde = 0;
+  function bloquear() {
+    const u = atual();
+    if (!u) return mostrar("f-login");
+    app.parar();
+    fecharFolhas();
+    if (dados.rapido[u.id]?.pin) abrirPinComBio(); else { dados.sessao = null; gravar(); mostrar("f-login"); }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) escondidaDesde = Date.now();
+    else if (escondidaDesde && Date.now() - escondidaDesde > BLOQUEIO_MS && $("auth").hidden && atual() && dados.rapido[atual().id]?.pin) bloquear();
+  });
+
+  // ---------------- folhas ----------------
+  function abrirFolha(id) { fecharFolhas(); $(id).hidden = false; }
+  function fecharFolhas() { ["folha-conta", "folha-admin", "folha-instalar"].forEach((f) => ($(f).hidden = true)); }
+  document.querySelectorAll(".folha").forEach((f) => f.addEventListener("click", (e) => { if (e.target === f || e.target.closest("[data-fechar]")) fecharFolhas(); }));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") fecharFolhas(); });
+
+  $("conta").addEventListener("click", () => {
+    const u = atual(); if (!u) return;
+    $("conta-avatar").textContent = iniciais(u.nome);
+    $("conta-nome").textContent = u.nome;
+    $("conta-perfil").textContent = `@${u.user} · ${PERFIS[u.perfil].nome}`;
+    $("m-utilizadores").hidden = !PERFIS[u.perfil].admin;
+    const r = dados.rapido[u.id];
+    $("m-rapido-estado").textContent = r?.cred ? `${BIO_CURTO} e PIN` : r?.pin ? "PIN" : "Desligada";
+    $("m-instalar").hidden = instalada() || !document.querySelector('link[rel="manifest"]');
+    $("m-bloquear").hidden = !r?.pin;
+    abrirFolha("folha-conta");
+  });
+  $("m-bloquear").addEventListener("click", () => { fecharFolhas(); bloquear(); });
+  $("m-sair").addEventListener("click", () => { fecharFolhas(); app.parar(); dados.sessao = null; gravar(); mostrar("f-login"); });
+  $("m-rapido").addEventListener("click", () => { fecharFolhas(); app.parar(); abrirPin("definir"); });
+  $("m-instalar").addEventListener("click", () => {
+    $("inst-android").hidden = !pedidoInstalar;
+    $("passos-ios").hidden = !ehIOS;
+    $("passos-android").hidden = ehIOS || !!pedidoInstalar;
+    $("inst-nota").hidden = !ehIOS;
+    abrirFolha("folha-instalar");
+  });
+  let pedidoInstalar = null;
+  addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedidoInstalar = e; });
+  $("inst-android").addEventListener("click", async () => { if (!pedidoInstalar) return; pedidoInstalar.prompt(); await pedidoInstalar.userChoice; pedidoInstalar = null; fecharFolhas(); });
+
+  // ---------------- administrador ----------------
+  let emEdicao = null, confirmarRemocao = false;
+  function desenharUtilizadores() {
+    const eu = atual();
+    $("lista-u").innerHTML = "";
+    dados.utilizadores.forEach((u) => {
+      const l = document.createElement("div"); l.className = "u-linha";
+      const pf = PERFIS[u.perfil];
+      const det = u.perfil === "convidado" && u.validade ? (expirado(u) ? `terminou a ${fmtData(u.validade)}` : `até ${fmtData(u.validade)}`)
+        : u.ultimo ? `entrou a ${fmtData(u.ultimo)}` : "ainda não entrou";
+      l.innerHTML = `<div class="pin-avatar"></div><div class="u-txt"><b><span class="u-nome"></span><em class="tu" hidden>tu</em></b>
+        <span class="u-det"><span class="perfil-pill ${u.perfil === "admin" ? "admin" : expirado(u) ? "expirado" : ""}"></span><span class="u-mais"></span></span></div>
+        <button class="u-editar" type="button">Editar</button>`;
+      l.querySelector(".pin-avatar").textContent = iniciais(u.nome);
+      l.querySelector(".u-nome").textContent = u.nome;
+      l.querySelector(".tu").hidden = u.id !== eu?.id;
+      l.querySelector(".u-mais").textContent = `@${u.user} · ${det}`;
+      l.querySelector(".perfil-pill").textContent = expirado(u) ? "Expirado" : pf.nome;
+      l.querySelector(".u-editar").addEventListener("click", () => abrirFormU(u));
+      $("lista-u").appendChild(l);
+    });
+  }
+  function descPerfil() {
+    const v = $("fu-perfil").value;
+    $("fu-perfil-desc").textContent = PERFIS[v].desc;
+    $("fu-validade-c").hidden = v !== "convidado";
+  }
+  $("fu-perfil").addEventListener("change", descPerfil);
+  function abrirFormU(u) {
+    emEdicao = u || null; confirmarRemocao = false;
+    $("form-u").hidden = false; $("u-novo").hidden = true;
+    $("fu-titulo").textContent = u ? `Editar ${u.nome}` : "Novo utilizador";
+    $("fu-nome").value = u?.nome || ""; $("fu-user").value = u?.user || ""; $("fu-pass").value = "";
+    $("fu-pass-l").textContent = u ? "Nova palavra-passe (opcional)" : "Palavra-passe";
+    $("fu-pass-a").textContent = u ? "Deixa em branco para manter a atual." : "Pelo menos 6 caracteres. Dá-a à pessoa em mão.";
+    $("fu-perfil").value = u?.perfil || "familia";
+    const d = new Date(); d.setDate(d.getDate() + 7);
+    $("fu-validade").value = u?.validade || d.toISOString().slice(0, 10);
+    $("fu-guardar").textContent = u ? "Guardar" : "Criar utilizador";
+    $("fu-remover").hidden = !u || u.id === atual()?.id;
+    $("fu-remover").textContent = "Remover";
+    $("fu-erro").textContent = "";
+    descPerfil();
+    setTimeout(() => $("form-u").scrollIntoView({ behavior: "smooth", block: "nearest" }), 30);
+  }
+  function fecharFormU() { $("form-u").hidden = true; $("u-novo").hidden = false; emEdicao = null; }
+  $("u-novo").addEventListener("click", () => abrirFormU(null));
+  $("fu-cancelar").addEventListener("click", fecharFormU);
+  $("form-u").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const erro = (t) => ($("fu-erro").textContent = t);
+    const nome = $("fu-nome").value.trim(), user = normal($("fu-user").value), pass = $("fu-pass").value, perfil = $("fu-perfil").value;
+    if (!nome || !user) return erro("Preenche o nome e o utilizador.");
+    if (!/^[a-z0-9._-]{2,}$/.test(user)) return erro("O utilizador só pode ter letras, números, ponto, hífen ou _.");
+    if (dados.utilizadores.some((x) => x.user === user && x !== emEdicao)) return erro("Já existe um utilizador com esse nome.");
+    if (!emEdicao && pass.length < 6) return erro("A palavra-passe precisa de pelo menos 6 caracteres.");
+    if (emEdicao && pass && pass.length < 6) return erro("A nova palavra-passe precisa de pelo menos 6 caracteres.");
+    const admins = dados.utilizadores.filter((x) => x.perfil === "admin");
+    if (emEdicao && emEdicao.perfil === "admin" && perfil !== "admin" && admins.length === 1) return erro("Tem de ficar pelo menos um administrador.");
+    if (perfil === "convidado" && !$("fu-validade").value) return erro("Escolhe até quando o convidado tem acesso.");
+    const alvo = emEdicao || { id: b64(aleatorio(9)), criado: new Date().toISOString() };
+    Object.assign(alvo, { nome, user, perfil, validade: perfil === "convidado" ? $("fu-validade").value : null });
+    if (pass) alvo.senha = await novoHash(pass);
+    if (!emEdicao) dados.utilizadores.push(alvo);
+    gravar();
+    const novo = !emEdicao;
+    fecharFormU(); desenharUtilizadores();
+    if (alvo.id === atual()?.id) entrarNaApp();
+    app.aviso({ ic: "info", t: novo ? "Utilizador criado" : "Alterações guardadas", d: `${nome} · ${PERFIS[perfil].nome}`, dur: 3200 });
+  });
+  $("fu-remover").addEventListener("click", () => {
+    if (!emEdicao) return;
+    if (!confirmarRemocao) { confirmarRemocao = true; $("fu-remover").textContent = "Confirmar remoção"; return; }
+    const nome = emEdicao.nome;
+    dados.utilizadores = dados.utilizadores.filter((x) => x !== emEdicao);
+    delete dados.rapido[emEdicao.id]; gravar();
+    fecharFormU(); desenharUtilizadores();
+    app.aviso({ ic: "info", t: "Utilizador removido", d: nome, dur: 3000 });
+  });
+  $("m-utilizadores").addEventListener("click", () => { fecharFormU(); desenharUtilizadores(); abrirFolha("folha-admin"); });
+
+  // ---------------- arranque ----------------
+  async function arrancar() {
+    const u = atual();
+    if (!dados.utilizadores.length) return mostrar("f-config");
+    if (!u || expirado(u)) { dados.sessao = null; gravar(); return mostrar("f-login"); }
+    if (dados.rapido[u.id]?.pin) return abrirPinComBio();
+    entrarNaApp();
+  }
+  arrancar();
+
+  // app instalável: regista o "service worker" quando a página corre no seu próprio site
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost") && window.top === window && document.querySelector('link[rel="manifest"]')) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+})();
+</script>
+</body></html>
