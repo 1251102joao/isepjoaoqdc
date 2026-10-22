@@ -515,7 +515,7 @@ html, body { touch-action: manipulation; }
   <div class="barra-in">
     <div class="marca">
       <h1>Quinta</h1>
-      <p id="resumo">Dia · 2 portões fechados · 3 câmaras ativas</p>
+      <p id="resumo">Dia · 2 portões fechados · 4 câmaras ativas</p>
     </div>
     <span class="tag">Demo</span>
     <button class="icone-btn" id="noite" type="button" aria-pressed="false" aria-label="Modo noite">
@@ -567,7 +567,7 @@ html, body { touch-action: manipulation; }
 
     <div class="painel-sep" id="p-camaras" role="tabpanel" hidden>
       <div class="resumo-cam">
-        <p id="cob">3 câmaras · 1 ponto cego no caminho norte</p>
+        <p id="cob">4 câmaras · 1 ponto cego no caminho norte</p>
         <button class="interruptor" id="ver-campo" role="switch" aria-checked="true" type="button"><span>Campo de visão</span><span class="trilho"></span></button>
       </div>
       <p class="ficha" id="ficha" hidden></p>
@@ -578,7 +578,7 @@ html, body { touch-action: manipulation; }
       <div class="regra">
         <h3>Chegada à noite</h3>
         <button class="interruptor" role="switch" aria-checked="true" data-regra="chegada" type="button" aria-label="Chegada à noite"><span class="trilho"></span></button>
-        <p>Movimento no Portão 1 depois do pôr do sol: acende o caminho e pergunta no telemóvel se queres abrir.</p>
+        <p>Chegas à quinta depois do pôr do sol (pela localização do telemóvel): acende o caminho, pergunta se queres abrir o Portão 1 e as câmaras seguem o carro.</p>
         <button class="simular" type="button" data-cenario="chegada">Simular</button>
       </div>
       <div class="regra">
@@ -793,12 +793,15 @@ html, body { touch-action: manipulation; }
   }
   const grupo = (g) => luzes.filter((l) => g === "todas" || l.grupo === g);
 
-  // ---- câmaras (3 Tapo TC41 simuladas + 1 sugerida) ----
+  // ---- câmaras: as 4 instaladas (posições marcadas na planta) + 1 sugerida ----
   const FOV = 82.3, ALCANCE = 30 * UNID_M;
+  const cam = (id) => CAMS.find((c) => c.id === id);
+  const reais = () => CAMS.filter((c) => !c.sugestao);
   const CAMS = [
-    { id: "cam-portao", nome: "Câmara do Portão 1", x: 642, y: 692, dir: 104, sweep: 26, fase: 0.0 },
-    { id: "cam-patio", nome: "Câmara do Pátio", x: 650, y: 252, dir: -6, sweep: 30, fase: 2.1 },
-    { id: "cam-estrada", nome: "Câmara da Estrada", x: 598, y: 512, dir: 168, sweep: 22, fase: 4.0 },
+    { id: "cam-noroeste", nome: "Câmara Noroeste", x: 424, y: 102, dir: -145, sweep: 24, fase: 0.0 },
+    { id: "cam-patio", nome: "Câmara do Pátio", x: 707, y: 262, dir: -112, sweep: 26, fase: 2.1 },
+    { id: "cam-caminho", nome: "Câmara do Caminho", x: 598, y: 336, dir: 88, sweep: 18, fase: 4.0 },
+    { id: "cam-portao2", nome: "Câmara do Portão 2", x: 506, y: 472, dir: 50, sweep: 22, fase: 1.2 },
     { id: "cam-norte", nome: "Caminho norte", x: 642, y: 96, dir: -96, sweep: 0, fase: 0, sugestao: true },
   ];
   const conePath = (r) => {
@@ -837,7 +840,7 @@ html, body { touch-action: manipulation; }
     const fixa = (c, p) => { const dx = p.x - c.x, dy = p.y - c.y; if (Math.hypot(dx, dy) > ALCANCE) return false;
       let a = Math.atan2(dy, dx) * 180 / Math.PI - c.dir; a = ((a + 540) % 360) - 180; return Math.abs(a) <= FOV / 2; };
     const r = DADOS.intruso; let iS = -1, iP = -1;
-    r.forEach((q, i) => { const p = { x: q[0], y: q[1] }; if (iS < 0 && fixa(CAMS[3], p)) iS = i; if (iP < 0 && fixa(CAMS[1], p)) iP = i; });
+    r.forEach((q, i) => { const p = { x: q[0], y: q[1] }; if (iS < 0 && fixa(cam("cam-norte"), p)) iS = i; if (iP < 0 && fixa(cam("cam-patio"), p)) iP = i; });
     let d = 0; for (let i = Math.max(0, iS); i < iP; i++) d += Math.hypot(r[i + 1][0] - r[i][0], r[i + 1][1] - r[i][1]);
     const m = Math.round(d / UNID_M);
     return { m, s: Math.round(m / 1.4) };
@@ -990,7 +993,7 @@ html, body { touch-action: manipulation; }
     if (!c) { ficha.hidden = true; return; }
     ficha.hidden = false;
     ficha.innerHTML = c.sugestao
-      ? `<b>Câmara sugerida</b> · Hoje ninguém vê quem desce pelo caminho norte até já estar no pátio. Uma 4.ª TC41 aqui deteta a pessoa cerca de ${GANHO.m} m mais cedo (≈ ${GANHO.s} s a andar).`
+      ? `<b>Câmara sugerida</b> · Hoje ninguém vê quem desce pelo caminho norte até já estar no pátio. Uma 5.ª câmara aqui deteta a pessoa cerca de ${GANHO.m} m mais cedo (≈ ${GANHO.s} s a andar).`
       : `<b>Tapo TC41</b> · imagem 2K · roda 360° · ângulo de ${FOV.toFixed(0)}° · visão noturna até 30 m · deteção de pessoas e movimento · segue o movimento sozinha. <span style="color:var(--muted)">Posição ilustrativa.</span>`;
     if (!verCampo) alternarCampo(true);
     voarPara(c.x, c.y + (c.sugestao ? -60 : 0), Math.max(s, sMin * 1.7));
@@ -1024,7 +1027,7 @@ html, body { touch-action: manipulation; }
     const parte = abertos === 0 ? "2 portões fechados" : abertos === 2 ? "2 portões abertos" : "1 portão aberto";
     const alerta = CAMS.some((c) => c.alerta);
     document.getElementById("resumo").textContent =
-      `${eNoite ? "Noite" : "Dia"}${relogio ? " · " + relogio : ""} · ${parte} · ${alerta ? "alerta ativo" : perm.camaras ? "3 câmaras ativas" : "acesso aos portões"}`;
+      `${eNoite ? "Noite" : "Dia"}${relogio ? " · " + relogio : ""} · ${parte} · ${alerta ? "alerta ativo" : perm.camaras ? `${reais().length} câmaras ativas` : "acesso aos portões"}`;
   }
 
   // ================= avisos =================
@@ -1115,22 +1118,22 @@ html, body { touch-action: manipulation; }
   async function cenarioChegada(meu) {
     if (!eNoite) { definirNoite(true); aviso({ ic: "info", t: "Anoiteceu", d: "As regras de noite ficam ativas.", dur: 2600 }); await dorme(600); }
     relogio = "22:41"; atualizarResumo();
-    const camP = CAMS[0], g1 = portoes["portao-1"]; camP.fixo = true;
+    const g1 = portoes["portao-1"];
     voarPara(630, 800, sMin * 1.9, 900);
     const rota = DADOS.carro;
     const carro = criarCarro();
     const iParagem = idxPorY(rota, DADOS.paragem, false);
-    let visto = false;
+    let avisado = false;
+    // não há câmara no Portão 1: quem avisa é a localização do telemóvel (zona da quinta no Home Assistant)
     await percorrer(carro, rota, 55, meu, (p) => {
-      if (!visto && emCone(camP, p)) {
-        visto = true; camP.alvo = p; alertaCam(camP, true);
-        aviso({ ic: "cam", t: "Movimento no Portão 1", d: "Câmara do Portão 1 · 22:41", dur: 5000 });
+      if (!avisado && p.y < DADOS.paragem + 170) {
+        avisado = true;
+        aviso({ ic: "info", t: "Estás a chegar à quinta", d: "Localização do telemóvel · 22:41", dur: 4500 });
         if (regras.chegada) {
           (async () => { for (const l of [...grupo("portoes"), ...grupo("caminho").reverse()]) { if (meu !== token) return; luz(l, true); await dorme(260); } })();
           setTimeout(() => meu === token && aviso({ ic: "luz", tipo: "auto", t: "Automação: Chegada à noite", d: "Luzes do caminho acesas.", dur: 4500 }), 900);
         }
       }
-      if (visto) camP.alvo = p;
     }, iParagem);
     if (meu !== token) return;
     if (regras.chegada) {
@@ -1141,17 +1144,28 @@ html, body { touch-action: manipulation; }
       selecionarPortao(g1, false); abrirSep("portoes");
     }
     if (meu !== token) return;
-    camP.alvo = null; alertaCam(camP, false);
     await moverPortao(g1, true);
     if (meu !== token) return;
-    voarPara(625, 600, sMin * 1.5, 1200);
-    let fechou = false;
+    voarPara(600, 580, sMin * 1.5, 1200);
+    let fechou = false, vistoPor = null;
     await percorrer(carro, rota, 60, meu, (p) => {
+      // as câmaras que o apanham rodam e seguem o carro; quando sai do alcance, voltam à patrulha
+      reais().forEach((c) => {
+        const perto = Math.hypot(p.x - c.x, p.y - c.y) <= ALCANCE;
+        c.alvo = (c.alvo ? perto : emCone(c, p)) ? p : null;
+        if (c.alvo && !vistoPor) {
+          vistoPor = c;
+          aviso({ ic: "cam", t: "Carro no caminho", d: `${c.nome} · a seguir o carro`, dur: 4200 });
+        }
+      });
       if (!fechou && p.y < DADOS.g1[1] - 40 && regras.fecho) {
         fechou = true;
         moverPortao(g1, false).then(() => meu === token && aviso({ ic: "portao", tipo: "auto", t: "Portão 1 fechado", d: "Fecho automático depois de o carro passar.", dur: 4200 }));
       }
     }, rota.length - 1, iParagem);
+    if (meu !== token) return;
+    await dorme(1200);
+    reais().forEach((c) => (c.alvo = null));
     if (meu !== token) return;
     if (regras.chegada) {
       aviso({ ic: "luz", tipo: "auto", t: "Luzes do caminho", d: "Desligam daqui a 2 minutos (aqui, já a seguir).", dur: 3800 });
@@ -1167,7 +1181,7 @@ html, body { touch-action: manipulation; }
     if (!eNoite) { definirNoite(true); await dorme(500); }
     relogio = "02:14"; atualizarResumo();
     if (!verCampo) alternarCampo(true);
-    const camP = CAMS[1], sug = CAMS[3]; camP.fixo = true;
+    const camP = cam("cam-patio"), sug = cam("cam-norte"); camP.fixo = true;
     voarPara(670, 70, sMin * 1.55, 900);
     await dorme(700);
     const rota = DADOS.intruso, pessoa = criarPessoa();
@@ -1183,7 +1197,7 @@ html, body { touch-action: manipulation; }
         aviso({ ic: "alerta", tipo: "alerta", t: "Pessoa detetada no pátio", d: "Câmara do Pátio · 02:14 · alerta enviado para o telemóvel", dur: 6000 });
         if (regras.intruso) {
           grupo("todas").forEach((l) => luz(l, true));
-          CAMS.filter((c) => !c.sugestao).forEach((c) => c !== camP && alertaCam(c, true));
+          reais().forEach((c) => c !== camP && alertaCam(c, true));
           setTimeout(() => meu === token && aviso({ ic: "luz", tipo: "auto", t: "Automação: Intruso", d: "Todas as luzes, sirene e holofote das câmaras.", dur: 5000 }), 700);
         }
         return false;
