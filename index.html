@@ -173,6 +173,16 @@ html, body { touch-action: manipulation; }
   text-align: left; cursor: pointer; border-top: 1px solid rgba(58, 69, 50, 0.6);
 }
 .linha:first-child { border-top: 0; }
+.linha-cam { display: flex; align-items: center; border-top: 1px solid rgba(58, 69, 50, 0.6); }
+.linha-cam:first-child { border-top: 0; }
+.linha-cam .linha { border-top: 0; flex: 1; min-width: 0; }
+.ver-cam {
+  flex: none; margin-right: 12px; height: 34px; padding: 0 12px 0 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--cam) 45%, transparent); background: rgba(127, 211, 230, 0.08); color: var(--cam);
+  font-weight: 700; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 6px;
+}
+.ver-cam svg { width: 14px; height: 14px; }
+.ver-cam.sugestao { border-style: dashed; color: var(--muted); border-color: var(--line); background: transparent; }
 .linha[aria-pressed="true"] { background: rgba(127, 211, 230, 0.07); }
 .linha-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .linha-t { font-weight: 700; font-size: 0.92rem; }
@@ -833,7 +843,7 @@ html, body { touch-action: manipulation; }
     mk("circle", { r: 7.5, fill: c.sugestao ? "rgba(23,29,21,0.6)" : "#171d15", stroke: c.sugestao ? "#b3aa94" : "#7fd3e6",
       "stroke-width": "1.6", "stroke-dasharray": c.sugestao ? "2.5 2" : "none" }, c.ic);
     mk("path", { d: "M-3.6,-2 h5 v4 h-5 z M1.4,-0.8 l2.4,-1.4 v4.4 l-2.4,-1.4 z", fill: c.sugestao ? "#b3aa94" : "#7fd3e6" }, c.ic);
-    c.ang = c.dir; c.alvo = null; c.alerta = false;
+    c.ang = c.dir; c.alvo = null; c.alerta = false; c.eventos = [];
   });
   let verCampo = true, patrulha = !reduz;
   const GANHO = (() => {
@@ -864,10 +874,11 @@ html, body { touch-action: manipulation; }
   }
   function tomarConta(c) { if (c.anim) { c.ang = angDe(c); c.anim.cancel(); c.anim = null; } }
   let cicloAtivo = false, emCenario = false;
-  function precisaCiclo() { return emCenario || CAMS.some((c) => c.alvo || c.fixo || (c.sweep && patrulha && !c.anim)); }
+  function precisaCiclo() { return emCenario || CAMS.some((c) => !c.manual && (c.alvo || c.fixo || (c.sweep && patrulha && !c.anim && !c.parado))); }
   function garantirCiclo() { if (!cicloAtivo) { cicloAtivo = true; requestAnimationFrame(ciclo); } }
   function desenharCones() {
     CAMS.forEach((c) => {
+      if (c.manual) return;
       if (c.alvo) {
         tomarConta(c);
         const want = Math.atan2(c.alvo.y - c.y, c.alvo.x - c.x) * 180 / Math.PI;
@@ -875,7 +886,7 @@ html, body { touch-action: manipulation; }
       } else if (c.fixo) {
         tomarConta(c);
         let d = ((c.dir - c.ang + 540) % 360) - 180; c.ang += d * 0.1;
-      } else if (!c.anim && c.sweep && patrulha) {
+      } else if (!c.anim && c.sweep && patrulha && !c.parado) {
         let d = ((c.dir - c.ang + 540) % 360) - 180; c.ang += d * 0.1;      // volta ao centro e retoma a patrulha
         if (Math.abs(d) < 0.4) { c.ang = c.dir; c.el.style.transform = `rotate(${c.dir}deg)`; iniciarPatrulha(c, 0); return; }
       } else return;
@@ -983,7 +994,13 @@ html, body { touch-action: manipulation; }
       b.innerHTML = `<span class="ponto ${c.sugestao ? "sugestao" : c.alerta ? "alerta" : "cam"}"></span>
         <span class="linha-txt"><span class="linha-t">${c.nome}</span><span class="linha-d">${estado}</span></span>`;
       b.addEventListener("click", () => selecionarCam(camSel === c ? null : c));
-      lista.appendChild(b);
+      const w = document.createElement("div"); w.className = "linha-cam";
+      const v = document.createElement("button"); v.type = "button"; v.className = "ver-cam" + (c.sugestao ? " sugestao" : "");
+      v.innerHTML = `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.8v10.4L13 8z"/></svg>${c.sugestao ? "Prever" : "Ver"}`;
+      v.setAttribute("aria-label", `${c.sugestao ? "Prever a imagem de" : "Ver em direto:"} ${c.nome}`);
+      v.addEventListener("click", () => window.quinta.abrirCamara && window.quinta.abrirCamara(c.id));
+      w.append(b, v);
+      lista.appendChild(w);
     });
   }
   function selecionarCam(c) {
@@ -995,6 +1012,7 @@ html, body { touch-action: manipulation; }
     ficha.innerHTML = c.sugestao
       ? `<b>Câmara sugerida</b> · Hoje ninguém vê quem desce pelo caminho norte até já estar no pátio. Uma 5.ª câmara aqui deteta a pessoa cerca de ${GANHO.m} m mais cedo (≈ ${GANHO.s} s a andar).`
       : `<b>Tapo TC41</b> · imagem 2K · roda 360° · ângulo de ${FOV.toFixed(0)}° · visão noturna até 30 m · deteção de pessoas e movimento · segue o movimento sozinha. <span style="color:var(--muted)">Posição ilustrativa.</span>`;
+    ficha.insertAdjacentHTML("beforeend", `<br><button type="button" class="ver-cam ${c.sugestao ? "sugestao" : ""}" style="margin:8px 0 0" data-ver="${c.id}"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.8v10.4L13 8z"/></svg>${c.sugestao ? "Prever a imagem" : "Ver em direto"}</button>`);
     if (!verCampo) alternarCampo(true);
     voarPara(c.x, c.y + (c.sugestao ? -60 : 0), Math.max(s, sMin * 1.7));
   }
@@ -1005,6 +1023,7 @@ html, body { touch-action: manipulation; }
     atualizarPatrulha();
   }
   document.getElementById("ver-campo").addEventListener("click", () => alternarCampo(!verCampo));
+  ficha.addEventListener("click", (e) => { const b = e.target.closest("[data-ver]"); if (b && window.quinta.abrirCamara) window.quinta.abrirCamara(b.dataset.ver); });
   atualizarListaCam();
 
   // ================= regras =================
@@ -1154,7 +1173,7 @@ html, body { touch-action: manipulation; }
         const perto = Math.hypot(p.x - c.x, p.y - c.y) <= ALCANCE;
         c.alvo = (c.alvo ? perto : emCone(c, p)) ? p : null;
         if (c.alvo && !vistoPor) {
-          vistoPor = c;
+          vistoPor = c; c.eventos.unshift({ h: "22:43", tipo: "carro", x: p.x, y: p.y });
           aviso({ ic: "cam", t: "Carro no caminho", d: `${c.nome} · a seguir o carro`, dur: 4200 });
         }
       });
@@ -1193,6 +1212,7 @@ html, body { touch-action: manipulation; }
       }
       if (tDet == null && emCone(camP, p)) {
         tDet = performance.now(); camP.alvo = p; alertaCam(camP, true);
+        camP.eventos.unshift({ h: "02:14", tipo: "pessoa", x: p.x, y: p.y });
         pessoa.anel.setAttribute("opacity", "1");
         aviso({ ic: "alerta", tipo: "alerta", t: "Pessoa detetada no pátio", d: "Câmara do Pátio · 02:14 · alerta enviado para o telemóvel", dur: 6000 });
         if (regras.intruso) {
@@ -1289,7 +1309,19 @@ html, body { touch-action: manipulation; }
     if (selecionado && !perm.portoes.includes(selecionado.id)) selecionarPortao(null, false);
     atualizarResumo();
   }
-  window.quinta = { aplicarPerfil, aviso, parar: () => { pararCenario(); fimSim(); emCenario = false; } };
+  const controloCam = {
+    cams: CAMS, alcance: ALCANCE, fov: FOV, vb: VB, unidM: UNID_M,
+    noite: () => eNoite,
+    luzes: () => luzes.filter((l) => l.ligada).map((l) => ({ x: l.x, y: l.y })),
+    angulo: (c) => angDe(c),
+    assumir(c) { tomarConta(c); c.manual = true; },
+    libertar(c) { c.manual = false; garantirCiclo(); },
+    rodar(c, a) { c.ang = a; c.el.style.transform = `rotate(${a.toFixed(2)}deg)`; },
+    patrulhar(c, on) { c.parado = !on; if (on) garantirCiclo(); },
+    sirene(c, on) { c.sirene.classList.toggle("ativa", on); },
+    privado(c, on) { c.el.style.visibility = on ? "hidden" : ""; },
+  };
+  window.quinta = { aplicarPerfil, aviso, controloCam, parar: () => { pararCenario(); fimSim(); emCenario = false; } };
 })();
 </script>
 
@@ -1901,6 +1933,597 @@ html, body { touch-action: manipulation; }
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost") && window.top === window && document.querySelector('link[rel="manifest"]')) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
+})();
+</script>
+
+
+<style>
+/* ---------- ecrã da câmara (pré-visualização da integração Tapo) ---------- */
+.cam-ecra { position: fixed; inset: 0; z-index: 27; display: flex; justify-content: center; background: rgba(5, 8, 5, 0.6); }
+.cam-in {
+  width: 100%; max-width: 560px; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  background: var(--bg); display: flex; flex-direction: column; touch-action: pan-y;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); animation: sobe 0.22s ease-out;
+}
+.cam-fixo { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+.cam-topo {
+  display: flex; align-items: center; gap: 10px; background: var(--bg);
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) max(16px, env(safe-area-inset-right, 0px)) 10px max(12px, env(safe-area-inset-left, 0px));
+}
+.cam-voltar { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: transparent; display: grid; place-items: center; cursor: pointer; flex: none; }
+.cam-voltar svg { width: 18px; height: 18px; }
+.cam-tit { flex: 1; min-width: 0; }
+.cam-tit h2 { margin: 0; font-family: var(--display); font-size: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cam-tit p { margin: 2px 0 0; font-size: 0.8rem; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.vivo-ponto { width: 8px; height: 8px; border-radius: 50%; background: var(--alerta); animation: pulso 1.4s ease-in-out infinite; }
+.cam-ecra.sugestao .vivo-ponto { background: var(--muted); animation: none; }
+.cam-sinal { color: var(--ok); flex: none; display: grid; place-items: center; }
+.cam-sinal svg { width: 22px; height: 22px; }
+
+.cam-video { position: relative; aspect-ratio: 16 / 9; background: #0b0e0b; overflow: hidden; }
+.cam-video canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.cam-sobre { position: absolute; font-size: 0.72rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); pointer-events: none; }
+.cam-sobre.topo-esq { top: 8px; left: 10px; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.cam-sobre.topo-dir { top: 7px; right: 8px; display: flex; gap: 6px; }
+.pill-v { padding: 2px 7px; border-radius: 6px; background: rgba(0, 0, 0, 0.45); text-shadow: none; }
+.pill-v.vivo { background: rgba(214, 64, 46, 0.9); }
+.cam-sobre.baixo-esq { bottom: 8px; left: 10px; font-weight: 400; font-size: 0.68rem; opacity: 0.85; }
+.cam-sobre.rec { top: 30px; left: 10px; color: #ff8b78; font-variant-numeric: tabular-nums; }
+.cam-sobre.falar { top: 30px; right: 8px; padding: 3px 8px; border-radius: 999px; background: rgba(127, 211, 230, 0.85); color: #0d2228; text-shadow: none; display: flex; align-items: center; gap: 6px; }
+.ondas { display: inline-flex; gap: 2px; align-items: center; height: 10px; }
+.ondas i { width: 2px; height: 100%; background: currentColor; border-radius: 2px; animation: onda 0.7s ease-in-out infinite; }
+.ondas i:nth-child(2) { animation-delay: 0.15s; } .ondas i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes onda { 50% { transform: scaleY(0.35); } }
+.cam-botoes-v { position: absolute; right: 8px; bottom: 6px; display: flex; gap: 6px; }
+.cam-botoes-v button { height: 28px; min-width: 28px; padding: 0 7px; border-radius: 8px; border: 0; background: rgba(0, 0, 0, 0.5); color: #fff; font-size: 0.72rem; font-weight: 700; cursor: pointer; display: grid; place-items: center; }
+.cam-botoes-v svg { width: 16px; height: 16px; }
+.cam-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+.cam-flash.dispara { animation: flash 0.45s ease-out; }
+@keyframes flash { from { opacity: 0.9; } to { opacity: 0; } }
+.cam-borda-sirene { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 3px rgba(255, 70, 50, 0.95), inset 0 0 40px rgba(255, 60, 40, 0.5); animation: sirene-borda 0.6s steps(2) infinite; }
+@keyframes sirene-borda { 50% { opacity: 0.15; } }
+.cam-capa { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 16px; background: #0d110d; color: var(--muted); font-size: 0.82rem; }
+.cam-capa svg { width: 30px; height: 30px; color: var(--text); }
+.cam-capa b { color: var(--text); font-family: var(--display); font-size: 1rem; }
+.cam-carrega { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: 0.82rem; background: #0b0e0b; }
+.roda { width: 26px; height: 26px; border-radius: 50%; border: 3px solid rgba(241, 235, 221, 0.15); border-top-color: var(--cam); animation: gira 0.8s linear infinite; }
+@keyframes gira { to { transform: rotate(360deg); } }
+.cam-grav { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: linear-gradient(transparent, rgba(0, 0, 0, 0.75)); color: #fff; font-size: 0.78rem; font-weight: 700; }
+.cam-grav .barra-p { flex: 1; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.25); overflow: hidden; }
+.cam-grav .barra-p i { display: block; height: 100%; width: 0; background: var(--cam); }
+.cam-grav button { height: 28px; padding: 0 10px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, 0.92); color: #111; font-weight: 700; font-size: 0.75rem; cursor: pointer; }
+.cam-faixa { position: absolute; left: 0; right: 0; bottom: 0; padding: 7px 10px; font-size: 0.75rem; font-weight: 700; color: var(--text); background: linear-gradient(transparent, rgba(0, 0, 0, 0.8)); }
+
+.cam-corpo { display: flex; flex-direction: column; gap: 12px; padding: 14px max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); }
+.cam-acoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.cam-acao {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 4px 10px; border-radius: 16px; cursor: pointer;
+  border: 1px solid var(--line); background: rgba(241, 235, 221, 0.04); font-size: 0.8rem; font-weight: 700; color: var(--text);
+}
+.cam-acao svg { width: 24px; height: 24px; }
+.cam-acao:disabled { opacity: 0.4; cursor: default; }
+.cam-acao[aria-pressed="true"] { background: rgba(127, 211, 230, 0.14); border-color: color-mix(in srgb, var(--cam) 60%, transparent); color: var(--cam); }
+.cam-acao.vermelho[aria-pressed="true"] { background: rgba(255, 122, 102, 0.16); border-color: color-mix(in srgb, var(--alerta) 60%, transparent); color: var(--alerta); }
+.cam-acao.ambar[aria-pressed="true"] { background: rgba(242, 196, 109, 0.16); border-color: color-mix(in srgb, var(--amber) 60%, transparent); color: var(--amber); }
+.cam-cartao { border: 1px solid var(--line); border-radius: 18px; padding: 14px; background: rgba(241, 235, 221, 0.03); display: flex; flex-direction: column; gap: 12px; }
+.cam-cartao h3 { margin: 0; font-family: var(--display); font-size: 1rem; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.cam-cartao h3 span { font-family: var(--ui); font-weight: 400; font-size: 0.78rem; color: var(--muted); }
+.ptz-linha { display: flex; align-items: center; gap: 16px; }
+.ptz { position: relative; width: 148px; height: 148px; flex: none; border-radius: 50%; background: radial-gradient(circle, rgba(241, 235, 221, 0.07) 0 30%, rgba(241, 235, 221, 0.04) 31%); border: 1px solid var(--line); touch-action: none; }
+body.cam-aberta .avisos { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
+.ptz, .ptz button, .cam-acao { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.ptz button { position: absolute; width: 50px; height: 50px; border-radius: 50%; border: 0; background: transparent; color: var(--text); display: grid; place-items: center; cursor: pointer; touch-action: none; }
+.ptz button:active, .ptz button.ativo { background: rgba(127, 211, 230, 0.16); color: var(--cam); }
+.ptz button svg { width: 22px; height: 22px; }
+.ptz [data-d="cima"] { top: 2px; left: 49px; } .ptz [data-d="baixo"] { bottom: 2px; left: 49px; }
+.ptz [data-d="esq"] { left: 2px; top: 49px; } .ptz [data-d="dir"] { right: 2px; top: 49px; }
+.ptz-centro { position: absolute; left: 62px; top: 62px; width: 24px; height: 24px; border-radius: 50%; background: rgba(241, 235, 221, 0.12); }
+.ptz-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.rumo { display: flex; align-items: center; gap: 10px; }
+.bussola { width: 42px; height: 42px; flex: none; border-radius: 50%; border: 1px solid var(--line); position: relative; }
+.bussola::before { content: "N"; position: absolute; top: 1px; left: 0; right: 0; text-align: center; font-size: 0.6rem; font-weight: 700; color: var(--muted); }
+.bussola svg { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--cam); }
+.rumo p { margin: 0; font-size: 0.82rem; line-height: 1.3; }
+.rumo p b { font-family: var(--display); font-size: 0.95rem; display: block; }
+.cam-cartao .interruptor { justify-content: space-between; width: 100%; color: var(--text); font-size: 0.88rem; padding: 2px 0; }
+.segmentado { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 3px; border-radius: 12px; background: rgba(241, 235, 221, 0.06); }
+.segmentado button { height: 34px; border-radius: 9px; border: 0; background: transparent; font-size: 0.8rem; font-weight: 700; color: var(--muted); cursor: pointer; }
+.segmentado button[aria-pressed="true"] { background: rgba(241, 235, 221, 0.12); color: var(--text); }
+.rotulo { font-size: 0.8rem; color: var(--muted); margin: 0 0 -6px; }
+.eventos { display: flex; flex-direction: column; gap: 8px; }
+.evento { display: flex; align-items: center; gap: 12px; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; width: 100%; }
+.evento canvas { width: 96px; height: 54px; border-radius: 8px; flex: none; background: #0b0e0b; }
+.evento-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.evento-txt b { font-size: 0.9rem; }
+.evento-txt span { font-size: 0.78rem; color: var(--muted); }
+.evento .play { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: rgba(241, 235, 221, 0.08); flex: none; }
+.evento .play svg { width: 12px; height: 12px; }
+.cam-nota { margin: 2px 2px 0; font-size: 0.76rem; color: var(--muted); line-height: 1.45; }
+@media (min-width: 600px) { .cam-in { border-left: 1px solid var(--line); border-right: 1px solid var(--line); } }
+</style>
+
+<div class="cam-ecra" id="cam-ecra" hidden role="dialog" aria-modal="true" aria-labelledby="cam-nome">
+  <div class="cam-in" id="cam-in">
+    <div class="cam-fixo">
+    <header class="cam-topo">
+      <button class="cam-voltar" id="cam-fechar" type="button" aria-label="Fechar"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg></button>
+      <div class="cam-tit"><h2 id="cam-nome">Câmara</h2><p><span class="vivo-ponto"></span><span id="cam-sub">Ao vivo · Tapo TC41</span></p></div>
+      <span class="cam-sinal" aria-label="Wi-Fi forte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.8 16a5 5 0 0 1 6.4 0"/><circle cx="12" cy="19.2" r="1" fill="currentColor"/></svg></span>
+    </header>
+
+    <div class="cam-video" id="cam-video">
+      <canvas id="cam-tela" aria-label="Imagem da câmara (simulada)"></canvas>
+      <div class="cam-sobre topo-esq" id="cam-hora">—</div>
+      <div class="cam-sobre topo-dir"><span class="pill-v vivo" id="cam-pill">AO VIVO</span></div>
+      <div class="cam-sobre rec" id="cam-rec" hidden>● REC 00:00</div>
+      <div class="cam-sobre falar" id="cam-falar-ind" hidden><span class="ondas"><i></i><i></i><i></i></span>A falar</div>
+      <div class="cam-sobre baixo-esq" id="cam-legenda">Imagem simulada a partir da planta</div>
+      <div class="cam-botoes-v" id="cam-botoes-v">
+        <button type="button" id="cam-som" aria-pressed="false" aria-label="Som"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path id="cam-som-x" d="m17 9 5 6M22 9l-5 6"/><path id="cam-som-on" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" style="display:none"/></svg></button>
+        <button type="button" id="cam-qual" aria-label="Qualidade">2K</button>
+      </div>
+      <div class="cam-flash" id="cam-flash"></div>
+      <div class="cam-borda-sirene" id="cam-borda" hidden></div>
+      <div class="cam-capa" id="cam-capa" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18M10.6 5.1A10.6 10.6 0 0 1 12 5c5.5 0 9 5.5 9 7a12 12 0 0 1-2.5 3.4M6.6 6.7C4.3 8.2 3 10.6 3 12c0 1.5 3.5 7 9 7a9.6 9.6 0 0 0 4.4-1.1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+        <b>Modo privado</b><span>A lente está desligada: a câmara não vê nem grava.</span>
+      </div>
+      <div class="cam-carrega" id="cam-carrega"><div class="roda"></div><span>A ligar à câmara…</span></div>
+      <div class="cam-grav" id="cam-grav" hidden><span id="cam-grav-t">Gravação</span><span class="barra-p"><i id="cam-grav-p"></i></span><button type="button" id="cam-direto">Voltar ao direto</button></div>
+      <div class="cam-faixa" id="cam-faixa" hidden>Câmara sugerida · o que veria daqui</div>
+    </div>
+    </div>
+
+    <div class="cam-corpo">
+      <div class="cam-acoes" id="cam-acoes">
+        <button class="cam-acao" type="button" data-acao="falar" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>Falar</button>
+        <button class="cam-acao" type="button" data-acao="foto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Foto</button>
+        <button class="cam-acao vermelho" type="button" data-acao="gravar" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>Gravar</button>
+        <button class="cam-acao vermelho" type="button" data-acao="sirene" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18v-5a6 6 0 0 1 12 0v5M4 18h16v3H4zM12 3v2M4.2 6.2l1.4 1.4M19.8 6.2l-1.4 1.4"/></svg>Sirene</button>
+        <button class="cam-acao ambar" type="button" data-acao="luz" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/></svg>Holofote</button>
+        <button class="cam-acao" type="button" data-acao="privado" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18M10.6 5.1A10.6 10.6 0 0 1 12 5c5.5 0 9 5.5 9 7a12 12 0 0 1-2.5 3.4M6.6 6.7C4.3 8.2 3 10.6 3 12c0 1.5 3.5 7 9 7a9.6 9.6 0 0 0 4.4-1.1"/></svg>Privado</button>
+      </div>
+
+      <section class="cam-cartao" aria-labelledby="ptz-t">
+        <h3 id="ptz-t">Rodar a câmara <span>mantém premido</span></h3>
+        <div class="ptz-linha">
+          <div class="ptz" id="ptz">
+            <button type="button" data-d="cima" aria-label="Rodar para cima"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg></button>
+            <button type="button" data-d="esq" aria-label="Rodar para a esquerda"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg></button>
+            <button type="button" data-d="dir" aria-label="Rodar para a direita"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></button>
+            <button type="button" data-d="baixo" aria-label="Rodar para baixo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+            <span class="ptz-centro"></span>
+          </div>
+          <div class="ptz-info">
+            <div class="rumo">
+              <div class="bussola"><svg viewBox="0 0 42 42" id="cam-agulha"><path d="M21 9 25 23H17z" fill="currentColor"/><circle cx="21" cy="21" r="2.5" fill="currentColor"/></svg></div>
+              <p><b id="cam-rumo">Noroeste</b><span id="cam-graus" style="color:var(--muted)">—</span></p>
+            </div>
+            <button class="interruptor" type="button" role="switch" id="cam-patrulha" aria-checked="true"><span>Patrulha</span><span class="trilho"></span></button>
+            <button class="interruptor" type="button" role="switch" id="cam-seguir" aria-checked="true"><span>Seguir pessoas</span><span class="trilho"></span></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="cam-cartao" id="cam-cartao-det" aria-label="Deteção e visão noturna">
+        <h3>Deteção e visão noturna</h3>
+        <button class="interruptor" type="button" role="switch" id="cam-det-pessoas" aria-checked="true"><span>Deteção de pessoas</span><span class="trilho"></span></button>
+        <button class="interruptor" type="button" role="switch" id="cam-det-veiculos" aria-checked="true"><span>Deteção de veículos</span><span class="trilho"></span></button>
+        <button class="interruptor" type="button" role="switch" id="cam-alertas" aria-checked="true"><span>Alertas no telemóvel</span><span class="trilho"></span></button>
+        <p class="rotulo">Visão noturna</p>
+        <div class="segmentado" id="cam-visao">
+          <button type="button" data-v="auto" aria-pressed="true">Automática</button>
+          <button type="button" data-v="iv" aria-pressed="false">Infravermelhos</button>
+          <button type="button" data-v="cores" aria-pressed="false">A cores</button>
+        </div>
+      </section>
+
+      <section class="cam-cartao" id="cam-cartao-ev" aria-labelledby="ev-t">
+        <h3 id="ev-t">Gravações de hoje <span>cartão microSD · 7 dias</span></h3>
+        <div class="eventos" id="cam-eventos"></div>
+      </section>
+
+      <p class="cam-nota" id="cam-nota">Pré-visualização: a imagem é simulada a partir da planta. Com as câmaras ligadas ao Home Assistant, aqui aparece o vídeo real e estes botões comandam a câmara.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const q = window.quinta, K = q.controloCam;
+  const $ = (id) => document.getElementById(id);
+  const ecra = $("cam-ecra"), tela = $("cam-tela");
+  const ALTURA = 3.2 * K.unidM;               // câmara a ~3,2 m do chão
+  const HFOV = K.fov * Math.PI / 180;
+  const RT = 250, KT = 4;                     // textura: 250 unidades à volta da câmara, 4 px por unidade
+  const MODELO = "Tapo TC41";
+  const EXEMPLOS = {
+    "cam-noroeste": [{ h: "10:52", tipo: "pessoa" }, { h: "07:31", tipo: "movimento" }],
+    "cam-patio": [{ h: "11:05", tipo: "pessoa" }, { h: "08:47", tipo: "pessoa" }, { h: "06:58", tipo: "movimento" }],
+    "cam-caminho": [{ h: "09:20", tipo: "carro" }, { h: "08:02", tipo: "pessoa" }],
+    "cam-portao2": [{ h: "10:14", tipo: "carro" }, { h: "07:45", tipo: "movimento" }],
+  };
+  const NOMES_EV = { pessoa: "Pessoa detetada", carro: "Veículo detetado", movimento: "Movimento" };
+  const PONTOS = ["Norte", "Nordeste", "Este", "Sudeste", "Sul", "Sudoeste", "Oeste", "Noroeste"];
+
+  let cam = null, yaw = 0, pitch = 32, tex = null, estado = {}, gravacao = null, recT = 0, relT = 0, aberto = false;
+  let qualidade = "2K", modoVisao = "auto";
+
+  // ---------- imagem da planta (vetorial) para pintar o chão ----------
+  let promPlanta = null;
+  function imagemPlanta() {
+    if (!promPlanta) promPlanta = new Promise((res, rej) => {
+      const base = document.getElementById("camada-base").cloneNode(true);
+      base.removeAttribute("style");
+      const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(base)], { type: "image/svg+xml" }));
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = () => { promPlanta = null; rej(new Error("planta")); };
+      img.src = url;
+    });
+    return promPlanta;
+  }
+  async function textura(c) {
+    if (tex && tex.id === c.id) return tex;
+    tex = null;
+    const img = await imagemPlanta();
+    const N = Math.round(2 * RT * KT);
+    const cv = document.createElement("canvas"); cv.width = cv.height = N;
+    const g = cv.getContext("2d", { willReadFrequently: true });
+    g.fillStyle = "#2b3526"; g.fillRect(0, 0, N, N);
+    g.drawImage(img, c.x - RT - K.vb.x, c.y - RT - K.vb.y, 2 * RT, 2 * RT, 0, 0, N, N);
+    tex = { id: c.id, N, px: g.getImageData(0, 0, N, N).data, x0: c.x - RT, y0: c.y - RT };
+    return tex;
+  }
+
+  // ---------- "câmara virtual": projeta o chão da planta como se visto a 3 m de altura ----------
+  function vistaPara(W, H, yawG, pitchG, op) {
+    const f = (W / 2) / Math.tan(HFOV / 2);
+    const yr = yawG * Math.PI / 180, pr = pitchG * Math.PI / 180;
+    const Fx = Math.cos(yr), Fy = Math.sin(yr), Rx = -Math.sin(yr), Ry = Math.cos(yr);
+    const cp = Math.cos(pr), sp = Math.sin(pr);
+    return { W, H, f, Fx, Fy, Rx, Ry, cp, sp, cx: op.cx, cy: op.cy };
+  }
+  function projetar(v, x, y) {
+    const rx = x - v.cx, ry = y - v.cy;
+    const xg = rx * v.Rx + ry * v.Ry, yg = rx * v.Fx + ry * v.Fy;
+    const d = yg * v.cp + ALTURA * v.sp;
+    if (d < 1) return null;
+    return { x: v.W / 2 + v.f * xg / d, y: v.H / 2 + v.f * (ALTURA * v.cp - yg * v.sp) / d, esc: v.f / d };
+  }
+  let semente = 1;
+  const rnd = () => ((semente = (semente * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  function pintar(ctx, W, H, c, yawG, pitchG, op) {
+    const img = ctx.createImageData(W, H), o = img.data;
+    const v = vistaPara(W, H, yawG, pitchG, { cx: c.x, cy: c.y });
+    const T = tex && tex.id === c.id ? tex : null;
+    const N = T ? T.N : 0, P = T ? T.px : null;
+    const noite = op.noite, cores = op.cores;
+    const ir = noite && !cores;
+    const luzes = noite ? op.luzes : [];
+    const ceuA = noite ? [10, 12, 16] : [170, 190, 205], ceuB = noite ? [22, 26, 30] : [214, 222, 222];
+    const neb = noite ? (ir ? [40, 40, 40] : [18, 20, 24]) : [196, 204, 204];
+    const ruido = noite ? 18 : 7;
+    semente = 7;
+    for (let py = 0; py < H; py++) {
+      const yc = (py + 0.5 - H / 2) / v.f;
+      const Dz = -v.sp - yc * v.cp;
+      const a = v.cp - yc * v.sp;
+      const ny = (py / H) * 2 - 1;
+      let i = py * W * 4;
+      if (Dz > -0.004) {                                   // acima do horizonte: céu
+        const k = Math.min(1, Math.max(0, (py / H) * 1.6));
+        for (let px = 0; px < W; px++, i += 4) {
+          const nx = (px / W) * 2 - 1, vin = 1 - 0.3 * (nx * nx + ny * ny), r = (rnd() - 0.5) * ruido;
+          let R = ceuA[0] + (ceuB[0] - ceuA[0]) * k, G = ceuA[1] + (ceuB[1] - ceuA[1]) * k, B = ceuA[2] + (ceuB[2] - ceuA[2]) * k;
+          if (ir) { const L = (R + G + B) / 3; R = G = B = L; }
+          o[i] = R * vin + r; o[i + 1] = G * vin + r; o[i + 2] = B * vin + r; o[i + 3] = 255;
+        }
+        continue;
+      }
+      const t = ALTURA / -Dz;
+      for (let px = 0; px < W; px++, i += 4) {
+        const xc = (px + 0.5 - W / 2) / v.f;
+        const gx = c.x + t * (v.Fx * a + v.Rx * xc), gy = c.y + t * (v.Fy * a + v.Ry * xc);
+        const dist = t * Math.sqrt(a * a + xc * xc);
+        let R, G, B;
+        const u = (gx - T?.x0) * KT, w = (gy - T?.y0) * KT;
+        if (T && u >= 0 && w >= 0 && u < N - 1 && w < N - 1) {
+          const u0 = u | 0, w0 = w | 0, fu = u - u0, fw = w - w0;
+          const j = (w0 * N + u0) * 4, j2 = j + N * 4;
+          const a1 = (1 - fu) * (1 - fw), a2 = fu * (1 - fw), a3 = (1 - fu) * fw, a4 = fu * fw;
+          R = P[j] * a1 + P[j + 4] * a2 + P[j2] * a3 + P[j2 + 4] * a4;
+          G = P[j + 1] * a1 + P[j + 5] * a2 + P[j2 + 1] * a3 + P[j2 + 5] * a4;
+          B = P[j + 2] * a1 + P[j + 6] * a2 + P[j2 + 2] * a3 + P[j2 + 6] * a4;
+        } else { R = neb[0]; G = neb[1]; B = neb[2]; }
+        if (!noite) {                                        // dia: um pouco mais de luz e contraste
+          R = (R - 128) * 1.08 + 140; G = (G - 128) * 1.08 + 140; B = (B - 128) * 1.08 + 136;
+        } else if (ir) {                                     // noite, infravermelhos: preto e branco, mais claro perto
+          const L = 0.3 * R + 0.59 * G + 0.11 * B;
+          const fo = Math.max(0.08, Math.min(1.25, 1.35 - dist / (K.alcance * 1.05)));
+          R = G = B = L * fo * 1.25 + 6;
+        } else {                                             // noite a cores: só o holofote ilumina
+          const fo = Math.max(0.1, Math.min(1.1, 1.3 - dist / (K.alcance * 0.85)));
+          R = R * fo * 1.12 + 6; G = G * fo * 1.02 + 4; B = B * fo * 0.85 + 2;
+        }
+        if (noite && luzes.length) {                         // candeeiros acesos
+          let s = 0;
+          for (const l of luzes) { const dx = gx - l.x, dy = gy - l.y, d2 = dx * dx + dy * dy; if (d2 < 3600) s += 1 - d2 / 3600; }
+          if (s) { s = Math.min(1, s); if (ir) { R += 70 * s; G += 70 * s; B += 70 * s; } else { R += 120 * s; G += 90 * s; B += 40 * s; } }
+        }
+        const nb = 1 - Math.exp(-dist / 420);               // névoa ao longe
+        R += (neb[0] - R) * nb * 0.8; G += (neb[1] - G) * nb * 0.8; B += (neb[2] - B) * nb * 0.8;
+        const nx = (px / W) * 2 - 1, vin = 1 - 0.3 * (nx * nx + ny * ny), r = (rnd() - 0.5) * ruido;
+        o[i] = R * vin + r; o[i + 1] = G * vin + r; o[i + 2] = B * vin + r; o[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return v;
+  }
+  // figuras deteção (pessoa / carro) com a caixa que a Tapo desenha à volta
+  function figura(ctx, v, alvo, op, comCaixa) {
+    const p = projetar(v, alvo.x, alvo.y); if (!p) return;
+    const esc = p.esc * K.unidM;                            // px por metro àquela distância
+    const cor = op.noite && !op.cores ? "#e9e9e9" : "#2c2a26";
+    ctx.save();
+    if (alvo.tipo === "carro") {
+      const w = 1.9 * esc, h = 1.5 * esc;
+      ctx.fillStyle = op.noite && !op.cores ? "#cfcfcf" : "#d9d2c2";
+      rr(ctx, p.x - w / 2, p.y - h, w, h * 0.72, h * 0.18);
+      ctx.fillStyle = op.noite ? "#7d7d7d" : "#3b4a55"; ctx.fillRect(p.x - w * 0.36, p.y - h * 0.95, w * 0.72, h * 0.3);
+      ctx.fillStyle = "#151515"; ctx.fillRect(p.x - w * 0.42, p.y - h * 0.32, w * 0.2, h * 0.3); ctx.fillRect(p.x + w * 0.22, p.y - h * 0.32, w * 0.2, h * 0.3);
+      ctx.fillStyle = "#fff4c8"; ctx.fillRect(p.x - w * 0.44, p.y - h * 0.6, w * 0.16, h * 0.1); ctx.fillRect(p.x + w * 0.28, p.y - h * 0.6, w * 0.16, h * 0.1);
+      if (comCaixa) caixa(ctx, p.x - w / 2 - 4, p.y - h - 4, w + 8, h + 6, "Veículo");
+    } else {
+      const hgt = 1.75 * esc, wid = 0.5 * esc;
+      ctx.fillStyle = cor;
+      ctx.beginPath(); ctx.arc(p.x, p.y - hgt + wid * 0.32, wid * 0.32, 0, Math.PI * 2); ctx.fill();
+      rr(ctx, p.x - wid / 2, p.y - hgt + wid * 0.66, wid, hgt * 0.5, wid * 0.25);
+      ctx.fillRect(p.x - wid * 0.38, p.y - hgt * 0.45, wid * 0.3, hgt * 0.45); ctx.fillRect(p.x + wid * 0.08, p.y - hgt * 0.45, wid * 0.3, hgt * 0.45);
+      if (comCaixa) caixa(ctx, p.x - wid * 0.9, p.y - hgt - 4, wid * 1.8, hgt + 6, "Pessoa");
+    }
+    ctx.restore();
+  }
+  function rr(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+    ctx.fill();
+  }
+  function caixa(ctx, x, y, w, h, txt) {
+    ctx.strokeStyle = "#f2c46d"; ctx.lineWidth = Math.max(1.5, tela.width / 360);
+    ctx.strokeRect(x, y, w, h);
+    const fs = Math.max(10, tela.width / 34);
+    ctx.font = `700 ${fs}px system-ui, sans-serif`;
+    const tw = ctx.measureText(txt).width + 8;
+    ctx.fillStyle = "#f2c46d"; ctx.fillRect(x, y - fs - 4, tw, fs + 4);
+    ctx.fillStyle = "#2a2110"; ctx.fillText(txt, x + 4, y - 5);
+  }
+
+  // ---------- desenhar o ecrã ----------
+  function opcoes(noiteForcada) {
+    const noite = noiteForcada != null ? noiteForcada : K.noite();
+    const cores = noite && (modoVisao === "cores" || (modoVisao === "auto" && estado.luz));
+    return { noite, cores, luzes: noite ? K.luzes() : [] };
+  }
+  function tamanho(baixa) {
+    const r = tela.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1) * (qualidade === "2K" ? 1 : 0.55) * (baixa ? 0.5 : 1);
+    return [Math.max(160, Math.round(r.width * dpr)), Math.max(90, Math.round(r.width * dpr * 9 / 16))];
+  }
+  function desenhar(baixa) {
+    if (!cam || !aberto) return;
+    const [W, H] = tamanho(baixa);
+    if (tela.width !== W || tela.height !== H) { tela.width = W; tela.height = H; }
+    const ctx = tela.getContext("2d");
+    if (gravacao) {
+      const ev = gravacao, noite = /^(2[0-3]|0[0-6])/.test(ev.h);
+      const op = opcoes(noite);
+      const v = pintar(ctx, W, H, cam, ev.yaw, ev.pitch, op);
+      figura(ctx, v, ev, op, true);
+    } else pintar(ctx, W, H, cam, yaw, pitch, opcoes());
+  }
+
+  // ---------- relógio da imagem ----------
+  const dois = (n) => String(n).padStart(2, "0");
+  let inicioNoite = 0;
+  function relogio() {
+    let d = new Date();
+    if (K.noite()) { if (!inicioNoite) inicioNoite = Date.now(); d = new Date(); d.setHours(23, 10, 0, 0); d = new Date(d.getTime() + (Date.now() - inicioNoite)); }
+    else inicioNoite = 0;
+    const data = `${dois(d.getDate())}-${dois(d.getMonth() + 1)}-${d.getFullYear()}`;
+    $("cam-hora").textContent = gravacao
+      ? `${data} ${gravacao.h}:${dois(Math.min(12, Math.floor((Date.now() - gravacao.t0) / 1000)))}`
+      : `${data} ${dois(d.getHours())}:${dois(d.getMinutes())}:${dois(d.getSeconds())}`;
+    if (gravacao && gravacao.t0) {
+      const k = Math.min(1, (Date.now() - gravacao.t0) / 12000); $("cam-grav-p").style.width = `${k * 100}%`;
+    }
+  }
+
+  // ---------- rumo / bússola ----------
+  function atualizarRumo() {
+    const b = ((yaw + 90) % 360 + 360) % 360;
+    $("cam-rumo").textContent = PONTOS[Math.round(b / 45) % 8];
+    $("cam-graus").textContent = `${Math.round(b)}° · inclinação ${Math.round(pitch)}°`;
+    $("cam-agulha").style.transform = `rotate(${b}deg)`;
+    $("cam-agulha").style.transformOrigin = "50% 50%";
+  }
+
+  // ---------- rodar (pan / tilt) ----------
+  let mov = null, rafMov = 0, tAnt = 0;
+  function passoMov(t) {
+    const dt = Math.min(0.05, (t - tAnt) / 1000); tAnt = t;
+    if (mov === "esq") yaw -= 40 * dt; else if (mov === "dir") yaw += 40 * dt;
+    else if (mov === "cima") pitch = Math.max(12, pitch - 22 * dt); else if (mov === "baixo") pitch = Math.min(62, pitch + 22 * dt);
+    K.rodar(cam, yaw); atualizarRumo(); desenhar(true);
+    if (mov) rafMov = requestAnimationFrame(passoMov); else desenhar(false);
+  }
+  function comecar(d, btn) {
+    if (gravacao || estado.privado || !cam) return;
+    mov = d; btn.classList.add("ativo");
+    cancelAnimationFrame(rafMov); tAnt = performance.now(); rafMov = requestAnimationFrame(passoMov);
+  }
+  function parar() { mov = null; document.querySelectorAll(".ptz button.ativo").forEach((b) => b.classList.remove("ativo")); }
+  document.querySelectorAll("#ptz button").forEach((b) => {
+    b.addEventListener("pointerdown", (e) => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (_) {} comecar(b.dataset.d, b); });
+    ["pointerup", "pointercancel", "lostpointercapture"].forEach((ev) => b.addEventListener(ev, parar));
+    b.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && !e.repeat) { e.preventDefault(); comecar(b.dataset.d, b); } });
+    b.addEventListener("keyup", (e) => { if (e.key === "Enter" || e.key === " ") parar(); });
+  });
+
+  // ---------- botões de ação ----------
+  const botao = (a) => document.querySelector(`[data-acao="${a}"]`);
+  function marcar(a, on) { estado[a] = on; botao(a).setAttribute("aria-pressed", String(on)); }
+  function relogioRec() { const s = Math.floor((Date.now() - recT) / 1000); $("cam-rec").textContent = `● REC ${dois(Math.floor(s / 60))}:${dois(s % 60)}`; }
+  let recInt = 0;
+  $("cam-acoes").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-acao]"); if (!b || b.disabled || !cam) return;
+    const a = b.dataset.acao;
+    if (a === "foto") {
+      const f = $("cam-flash"); f.classList.remove("dispara"); void f.offsetWidth; f.classList.add("dispara");
+      q.aviso({ ic: "cam", t: "Foto guardada", d: `${cam.nome} · na galeria do telemóvel`, dur: 2600 });
+    } else if (a === "gravar") {
+      const on = !estado.gravar; marcar("gravar", on); $("cam-rec").hidden = !on;
+      clearInterval(recInt);
+      if (on) { recT = Date.now(); relogioRec(); recInt = setInterval(relogioRec, 500); }
+      else q.aviso({ ic: "cam", t: "Vídeo guardado", d: `${$("cam-rec").textContent.replace("● REC ", "")} · na galeria do telemóvel`, dur: 3000 });
+    } else if (a === "falar") {
+      const on = !estado.falar; marcar("falar", on); $("cam-falar-ind").hidden = !on;
+    } else if (a === "sirene") {
+      const on = !estado.sirene; marcar("sirene", on); $("cam-borda").hidden = !on; K.sirene(cam, on);
+    } else if (a === "luz") {
+      const on = !estado.luz; marcar("luz", on); desenhar(false);
+      q.aviso({ ic: "luz", t: on ? "Holofote ligado" : "Holofote desligado", d: K.noite() ? (on ? "Imagem a cores à noite." : "Volta aos infravermelhos.") : cam.nome, dur: 2600 });
+    } else if (a === "privado") {
+      const on = !estado.privado; marcar("privado", on); privado(on);
+    }
+  });
+  function privado(on) {
+    $("cam-capa").hidden = !on; K.privado(cam, on);
+    ["falar", "foto", "gravar", "sirene", "luz"].forEach((a) => (botao(a).disabled = on));
+    if (on) { if (estado.gravar) botao("gravar").click(); if (estado.falar) botao("falar").click(); if (estado.sirene) botao("sirene").click(); }
+    $("cam-pill").textContent = on ? "PRIVADO" : "AO VIVO";
+  }
+
+  // som e qualidade
+  $("cam-som").addEventListener("click", () => {
+    const on = $("cam-som").getAttribute("aria-pressed") !== "true";
+    $("cam-som").setAttribute("aria-pressed", String(on));
+    $("cam-som-x").style.display = on ? "none" : ""; $("cam-som-on").style.display = on ? "" : "none";
+  });
+  $("cam-qual").addEventListener("click", () => { qualidade = qualidade === "2K" ? "HD" : "2K"; $("cam-qual").textContent = qualidade; desenhar(false); });
+
+  // interruptores
+  ["cam-patrulha", "cam-seguir", "cam-det-pessoas", "cam-det-veiculos", "cam-alertas"].forEach((id) => $(id).addEventListener("click", () => {
+    const el = $(id), on = el.getAttribute("aria-checked") !== "true"; el.setAttribute("aria-checked", String(on));
+    if (cam) cam[id] = on;
+    if (id === "cam-patrulha" && cam) K.patrulhar(cam, on);
+  }));
+  $("cam-visao").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-v]"); if (!b) return;
+    modoVisao = b.dataset.v;
+    $("cam-visao").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    desenhar(false);
+  });
+
+  // ---------- gravações ----------
+  function eventosDe(c) {
+    const ex = (EXEMPLOS[c.id] || []).map((e, i) => ({ ...e }));
+    return [...c.eventos.map((e) => ({ ...e, simulado: true })), ...ex].map((e, i) => {
+      if (e.x == null) {                                   // exemplo: algures no campo de visão
+        const a = (c.dir + (i % 2 ? 14 : -10)) * Math.PI / 180, d = K.alcance * (0.35 + 0.12 * (i % 3));
+        e.x = c.x + Math.cos(a) * d; e.y = c.y + Math.sin(a) * d;
+      }
+      e.yaw = Math.atan2(e.y - c.y, e.x - c.x) * 180 / Math.PI;
+      // inclina a câmara para a pessoa/carro ficar a meio da imagem
+      e.pitch = Math.max(12, Math.min(62, Math.atan(ALTURA / Math.max(1, Math.hypot(e.x - c.x, e.y - c.y))) * 180 / Math.PI + 2));
+      return e;
+    });
+  }
+  function desenharEventos() {
+    const lista = $("cam-eventos"); lista.innerHTML = "";
+    eventosDe(cam).forEach((ev) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "evento";
+      const cv = document.createElement("canvas"); cv.width = 192; cv.height = 108;
+      const txt = document.createElement("span"); txt.className = "evento-txt";
+      txt.innerHTML = "<b></b><span></span>";
+      txt.querySelector("b").textContent = NOMES_EV[ev.tipo] || "Movimento";
+      txt.querySelector("span").textContent = `${ev.simulado ? "Simulação · " : ""}${ev.h} · 12 s`;
+      const pl = document.createElement("span"); pl.className = "play"; pl.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.8v10.4L13 8z"/></svg>';
+      b.append(cv, txt, pl);
+      b.addEventListener("click", () => verGravacao(ev));
+      lista.appendChild(b);
+      const noite = /^(2[0-3]|0[0-6])/.test(ev.h), op = opcoes(noite);
+      const ctx = cv.getContext("2d"), v = pintar(ctx, 192, 108, cam, ev.yaw, ev.pitch, op);
+      if (ev.tipo !== "movimento") figura(ctx, v, ev, op, false);
+    });
+  }
+  function verGravacao(ev) {
+    if (estado.privado) return;
+    gravacao = { ...ev, t0: Date.now() };
+    $("cam-grav").hidden = false; $("cam-grav-t").textContent = `Gravação · ${ev.h}`;
+    $("cam-pill").textContent = "GRAVAÇÃO"; $("cam-pill").classList.remove("vivo");
+    $("cam-botoes-v").hidden = true; $("cam-legenda").hidden = true;
+    relogio(); desenhar(false);
+  }
+  function voltarDireto() {
+    gravacao = null; $("cam-grav").hidden = true; $("cam-grav-p").style.width = "0";
+    $("cam-pill").textContent = estado.privado ? "PRIVADO" : "AO VIVO"; $("cam-pill").classList.add("vivo");
+    $("cam-botoes-v").hidden = false; $("cam-legenda").hidden = false;
+    relogio(); desenhar(false);
+  }
+  $("cam-direto").addEventListener("click", voltarDireto);
+
+  // ---------- abrir / fechar ----------
+  async function abrir(id) {
+    const c = K.cams.find((x) => x.id === id); if (!c) return;
+    if (aberto) fechar();
+    cam = c; aberto = true; estado = {}; gravacao = null;
+    yaw = K.angulo(c); pitch = 32;
+    K.assumir(c); K.rodar(c, yaw);
+    ecra.hidden = false; ecra.classList.toggle("sugestao", !!c.sugestao); document.body.classList.add("cam-aberta");
+    $("cam-in").scrollTop = 0;
+    $("cam-nome").textContent = c.sugestao ? "Câmara sugerida · caminho norte" : c.nome;
+    $("cam-sub").textContent = c.sugestao ? "Ainda não instalada" : `Ao vivo · ${MODELO}`;
+    $("cam-faixa").hidden = !c.sugestao;
+    $("cam-pill").textContent = c.sugestao ? "PREVISÃO" : "AO VIVO"; $("cam-pill").classList.toggle("vivo", !c.sugestao);
+    ["falar", "foto", "gravar", "sirene", "luz", "privado"].forEach((a) => { marcar(a, false); botao(a).disabled = !!c.sugestao; });
+    $("cam-capa").hidden = true; $("cam-borda").hidden = true; $("cam-rec").hidden = true; $("cam-falar-ind").hidden = true; $("cam-grav").hidden = true;
+    $("cam-botoes-v").hidden = false; $("cam-legenda").hidden = false;
+    $("cam-cartao-det").hidden = !!c.sugestao; $("cam-cartao-ev").hidden = !!c.sugestao;
+    $("cam-patrulha").setAttribute("aria-checked", String(!c.parado));
+    ["cam-seguir", "cam-det-pessoas", "cam-det-veiculos", "cam-alertas"].forEach((k) => $(k).setAttribute("aria-checked", String(c[k] !== false)));
+    $("cam-nota").textContent = c.sugestao
+      ? "Pré-visualização do que uma câmara neste ponto veria. Serve para decidir onde instalar a próxima."
+      : "Pré-visualização: a imagem é simulada a partir da planta. Com as câmaras ligadas ao Home Assistant, aqui aparece o vídeo real e estes botões comandam a câmara.";
+    atualizarRumo(); relogio(); clearInterval(relT); relT = setInterval(relogio, 1000);
+    $("cam-carrega").hidden = false;
+    $("cam-eventos").innerHTML = "";
+    $("cam-fechar").focus({ preventScroll: true });
+    const minimo = new Promise((r) => setTimeout(r, 650));         // parece mesmo que está a ligar
+    try { await textura(c); } catch (_) {}
+    await minimo;
+    if (cam !== c || !aberto) return;
+    $("cam-carrega").hidden = true;
+    desenhar(false);
+    if (!c.sugestao) desenharEventos();
+  }
+  function fechar() {
+    if (!aberto) return;
+    parar(); cancelAnimationFrame(rafMov);
+    if (estado.sirene) K.sirene(cam, false);
+    if (estado.privado) K.privado(cam, false);
+    clearInterval(recInt); clearInterval(relT);
+    K.libertar(cam);
+    aberto = false; cam = null; gravacao = null; ecra.hidden = true; document.body.classList.remove("cam-aberta");
+  }
+  $("cam-fechar").addEventListener("click", fechar);
+  ecra.addEventListener("click", (e) => { if (e.target === ecra) fechar(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && aberto) fechar(); });
+  addEventListener("resize", () => aberto && desenhar(false));
+
+  q.abrirCamara = abrir;
+  const pararAntes = q.parar;
+  q.parar = () => { fechar(); pararAntes(); };
 })();
 </script>
 </body></html>
