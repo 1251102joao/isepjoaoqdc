@@ -990,7 +990,8 @@ html, body { touch-action: manipulation; }
     CAMS.forEach((c) => {
       const b = document.createElement("button");
       b.className = "linha"; b.type = "button"; b.setAttribute("aria-pressed", String(camSel === c));
-      const estado = c.sugestao ? "Sugestão · cobre um ponto cego" : c.alerta ? "Pessoa detetada · a seguir" : "A gravar · deteção de pessoas ativa";
+      const viaHA = !c.sugestao && window.quinta && window.quinta.ha && window.quinta.ha.camaraDe(c.id);
+      const estado = c.sugestao ? "Sugestão · cobre um ponto cego" : c.alerta ? "Pessoa detetada · a seguir" : viaHA ? "Ao vivo · Home Assistant" : "A gravar · deteção de pessoas ativa";
       b.innerHTML = `<span class="ponto ${c.sugestao ? "sugestao" : c.alerta ? "alerta" : "cam"}"></span>
         <span class="linha-txt"><span class="linha-t">${c.nome}</span><span class="linha-d">${estado}</span></span>`;
       b.addEventListener("click", () => selecionarCam(camSel === c ? null : c));
@@ -1320,6 +1321,7 @@ html, body { touch-action: manipulation; }
     patrulhar(c, on) { c.parado = !on; if (on) garantirCiclo(); },
     sirene(c, on) { c.sirene.classList.toggle("ativa", on); },
     privado(c, on) { c.el.style.visibility = on ? "hidden" : ""; },
+    atualizarLista: () => atualizarListaCam(),
   };
   window.quinta = { aplicarPerfil, aviso, controloCam, parar: () => { pararCenario(); fimSim(); emCenario = false; } };
 })();
@@ -1624,6 +1626,7 @@ html, body { touch-action: manipulation; }
   const hoje = () => new Date().toISOString().slice(0, 10);
   const expirado = (u) => u.perfil === "convidado" && u.validade && u.validade < hoje();
   const atual = () => (dados.sessao ? porId(dados.sessao.uid) : null);
+  app.utilizador = () => { const u = atual(); return u ? { nome: u.nome, perfil: u.perfil, admin: !!(PERFIS[u.perfil] || {}).admin } : null; };
   const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
   const fmtData = (iso) => { const d = new Date(iso.length === 10 ? iso + "T12:00" : iso); return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`; };
 
@@ -1962,6 +1965,10 @@ html, body { touch-action: manipulation; }
 
 .cam-video { position: relative; aspect-ratio: 16 / 9; background: #0b0e0b; overflow: hidden; }
 .cam-video canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.cam-video video, .cam-video .cam-mjpeg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+.cam-acao[data-indisp]::after { content: attr(data-indisp); font-size: 0.66rem; font-weight: 400; color: var(--muted); margin-top: -3px; }
+.cam-reais { display: flex; flex-direction: column; gap: 12px; }
+.cam-ptz-nota { margin: 0; font-size: 0.8rem; color: var(--muted); }
 .cam-sobre { position: absolute; font-size: 0.72rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); pointer-events: none; }
 .cam-sobre.topo-esq { top: 8px; left: 10px; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 .cam-sobre.topo-dir { top: 7px; right: 8px; display: flex; gap: 6px; }
@@ -2053,6 +2060,8 @@ body.cam-aberta .avisos { top: auto; bottom: calc(env(safe-area-inset-bottom, 0p
 
     <div class="cam-video" id="cam-video">
       <canvas id="cam-tela" aria-label="Imagem da câmara (simulada)"></canvas>
+      <video id="cam-real" playsinline muted autoplay hidden aria-label="Vídeo da câmara"></video>
+      <img class="cam-mjpeg" id="cam-mjpeg" alt="Vídeo da câmara" hidden>
       <div class="cam-sobre topo-esq" id="cam-hora">—</div>
       <div class="cam-sobre topo-dir"><span class="pill-v vivo" id="cam-pill">AO VIVO</span></div>
       <div class="cam-sobre rec" id="cam-rec" hidden>● REC 00:00</div>
@@ -2101,12 +2110,14 @@ body.cam-aberta .avisos { top: auto; bottom: calc(env(safe-area-inset-bottom, 0p
             </div>
             <button class="interruptor" type="button" role="switch" id="cam-patrulha" aria-checked="true"><span>Patrulha</span><span class="trilho"></span></button>
             <button class="interruptor" type="button" role="switch" id="cam-seguir" aria-checked="true"><span>Seguir pessoas</span><span class="trilho"></span></button>
+            <p class="cam-ptz-nota" id="cam-ptz-nota" hidden></p>
           </div>
         </div>
       </section>
 
       <section class="cam-cartao" id="cam-cartao-det" aria-label="Deteção e visão noturna">
-        <h3>Deteção e visão noturna</h3>
+        <h3 id="cam-det-t">Deteção e visão noturna</h3>
+        <div class="cam-reais" id="cam-reais" hidden></div>
         <button class="interruptor" type="button" role="switch" id="cam-det-pessoas" aria-checked="true"><span>Deteção de pessoas</span><span class="trilho"></span></button>
         <button class="interruptor" type="button" role="switch" id="cam-det-veiculos" aria-checked="true"><span>Deteção de veículos</span><span class="trilho"></span></button>
         <button class="interruptor" type="button" role="switch" id="cam-alertas" aria-checked="true"><span>Alertas no telemóvel</span><span class="trilho"></span></button>
@@ -2120,6 +2131,7 @@ body.cam-aberta .avisos { top: auto; bottom: calc(env(safe-area-inset-bottom, 0p
 
       <section class="cam-cartao" id="cam-cartao-ev" aria-labelledby="ev-t">
         <h3 id="ev-t">Gravações de hoje <span>cartão microSD · 7 dias</span></h3>
+        <p class="ha-nota" id="cam-ev-real" hidden>As gravações do cartão microSD aparecem aqui quando juntares ao Home Assistant a integração extra «Tapo: Cameras Control».</p>
         <div class="eventos" id="cam-eventos"></div>
       </section>
 
@@ -2148,6 +2160,7 @@ body.cam-aberta .avisos { top: auto; bottom: calc(env(safe-area-inset-bottom, 0p
 
   let cam = null, yaw = 0, pitch = 32, tex = null, estado = {}, gravacao = null, recT = 0, relT = 0, aberto = false;
   let qualidade = "2K", modoVisao = "auto";
+  let real = null;                            // { eid, k } quando a câmara vem do Home Assistant
 
   // ---------- imagem da planta (vetorial) para pintar o chão ----------
   let promPlanta = null;
@@ -2357,12 +2370,21 @@ body.cam-aberta .avisos { top: auto; bottom: calc(env(safe-area-inset-bottom, 0p
     K.rodar(cam, yaw); atualizarRumo(); desenhar(true);
     if (mov) rafMov = requestAnimationFrame(passoMov); else desenhar(false);
   }
+  let tRepete = 0;
+  const BOTAO_PTZ = { esq: "panEsq", dir: "panDir", cima: "tiltCima", baixo: "tiltBaixo" };
+  function passoReal(d) {
+    const eid = real && real.k[BOTAO_PTZ[d]]; if (!eid) return;
+    q.ha.chamar("button", "press", { entity_id: eid }).catch(() => q.aviso({ ic: "info", t: "A câmara não respondeu", d: "Tenta outra vez.", dur: 2600 }));
+    if (d === "esq" || d === "dir") { yaw += d === "esq" ? -15 : 15; K.rodar(cam, yaw); } else pitch = Math.max(12, Math.min(62, pitch + (d === "cima" ? -5 : 5)));
+    atualizarRumo();
+  }
   function comecar(d, btn) {
     if (gravacao || estado.privado || !cam) return;
     mov = d; btn.classList.add("ativo");
+    if (real) { passoReal(d); clearInterval(tRepete); tRepete = setInterval(() => mov && passoReal(mov), 700); return; }
     cancelAnimationFrame(rafMov); tAnt = performance.now(); rafMov = requestAnimationFrame(passoMov);
   }
-  function parar() { mov = null; document.querySelectorAll(".ptz button.ativo").forEach((b) => b.classList.remove("ativo")); }
+  function parar() { mov = null; clearInterval(tRepete); document.querySelectorAll(".ptz button.ativo").forEach((b) => b.classList.remove("ativo")); }
   document.querySelectorAll("#ptz button").forEach((b) => {
     b.addEventListener("pointerdown", (e) => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (_) {} comecar(b.dataset.d, b); });
     ["pointerup", "pointercancel", "lostpointercapture"].forEach((ev) => b.addEventListener(ev, parar));
@@ -2378,6 +2400,7 @@ body.cam-aberta .avisos { top: auto; bottom: calc(env(safe-area-inset-bottom, 0p
   $("cam-acoes").addEventListener("click", (e) => {
     const b = e.target.closest("[data-acao]"); if (!b || b.disabled || !cam) return;
     const a = b.dataset.acao;
+    if (real) return acaoReal(a);
     if (a === "foto") {
       const f = $("cam-flash"); f.classList.remove("dispara"); void f.offsetWidth; f.classList.add("dispara");
       q.aviso({ ic: "cam", t: "Foto guardada", d: `${cam.nome} · na galeria do telemóvel`, dur: 2600 });
@@ -2499,6 +2522,8 @@ body.cam-aberta .avisos { top: auto; bottom: calc(env(safe-area-inset-bottom, 0p
     $("cam-carrega").hidden = false;
     $("cam-eventos").innerHTML = "";
     $("cam-fechar").focus({ preventScroll: true });
+    prepararModo(c);
+    if (real) return abrirReal(c);
     const minimo = new Promise((r) => setTimeout(r, 650));         // parece mesmo que está a ligar
     try { await textura(c); } catch (_) {}
     await minimo;
@@ -2509,11 +2534,13 @@ body.cam-aberta .avisos { top: auto; bottom: calc(env(safe-area-inset-bottom, 0p
   }
   function fechar() {
     if (!aberto) return;
+    pararVideo();
     parar(); cancelAnimationFrame(rafMov);
     if (estado.sirene) K.sirene(cam, false);
     if (estado.privado) K.privado(cam, false);
     clearInterval(recInt); clearInterval(relT);
     K.libertar(cam);
+    if (real || desligarOuvinte) fecharReal();
     aberto = false; cam = null; gravacao = null; ecra.hidden = true; document.body.classList.remove("cam-aberta");
   }
   $("cam-fechar").addEventListener("click", fechar);
@@ -2521,9 +2548,525 @@ body.cam-aberta .avisos { top: auto; bottom: calc(env(safe-area-inset-bottom, 0p
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && aberto) fechar(); });
   addEventListener("resize", () => aberto && desenhar(false));
 
+  // ================= modo real: câmara ligada ao Home Assistant =================
+  const video = $("cam-real"), mjpeg = $("cam-mjpeg");
+  let hls = null, tVideo = 0, desligarOuvinte = null;
+  const ACOES_REAIS = ["falar", "foto", "gravar", "sirene", "luz", "privado"];
+  function prepararModo(c) {
+    const eid = !c.sugestao && q.ha && q.ha.camaraDe(c.id);
+    real = eid ? { eid, k: q.ha.controlos(eid) } : null;
+    const r = !!real;
+    tela.hidden = r; video.hidden = true; mjpeg.hidden = true;
+    $("cam-hora").hidden = r; $("cam-qual").hidden = r;
+    $("cam-legenda").textContent = r ? `Home Assistant · ${q.ha.nome(eid)}` : "Imagem simulada a partir da planta";
+    $("cam-sub").textContent = c.sugestao ? "Ainda não instalada" : r ? "Ao vivo · Home Assistant" : `Ao vivo · ${MODELO}`;
+    ["cam-patrulha", "cam-seguir"].forEach((id) => ($(id).hidden = r));
+    ["cam-det-pessoas", "cam-det-veiculos", "cam-alertas", "cam-visao"].forEach((id) => ($(id).hidden = r));
+    document.querySelector("#cam-cartao-det .rotulo").hidden = r;
+    $("cam-reais").hidden = !r; $("cam-det-t").textContent = r ? "Deteção" : "Deteção e visão noturna";
+    $("cam-eventos").hidden = r; $("cam-ev-real").hidden = !r;
+    $("ev-t").firstChild.textContent = r ? "Gravações " : "Gravações de hoje ";
+    ACOES_REAIS.forEach((a) => botao(a).removeAttribute("data-indisp"));
+    document.querySelectorAll("#ptz button").forEach((b) => (b.disabled = false));
+    $("cam-ptz-nota").hidden = true;
+    $("cam-nota").textContent = c.sugestao
+      ? "Pré-visualização do que uma câmara neste ponto veria. Serve para decidir onde instalar a próxima."
+      : r ? "Vídeo e comandos a sério, através do Home Assistant. O que aparece apagado esta câmara não tem na integração atual."
+        : "Pré-visualização: a imagem é simulada a partir da planta. Com as câmaras ligadas ao Home Assistant, aqui aparece o vídeo real e estes botões comandam a câmara.";
+    if (!r) return;
+    const k = real.k;
+    const indisp = (a, txt) => { botao(a).disabled = true; botao(a).setAttribute("data-indisp", txt); };
+    indisp("falar", "precisa do go2rtc");
+    indisp("gravar", "grava no cartão");
+    if (!k.sirene) indisp("sirene", "não disponível");
+    if (!k.luz) indisp("luz", "não disponível");
+    if (!k.privado && !k.privadoCamera) indisp("privado", "não disponível");
+    const temPtz = k.panEsq || k.panDir || k.tiltCima || k.tiltBaixo;
+    document.querySelectorAll("#ptz button").forEach((b) => (b.disabled = !k[BOTAO_PTZ[b.dataset.d]]));
+    $("cam-ptz-nota").hidden = false;
+    $("cam-ptz-nota").textContent = temPtz ? "Cada toque roda a câmara um passo." : "Esta câmara não roda.";
+    desenharInterruptoresReais();
+    atualizarReal();
+  }
+  function desenharInterruptoresReais() {
+    const k = real.k, caixa = $("cam-reais"); caixa.innerHTML = "";
+    const itens = [[k.movimento, "Deteção de movimento"], [k.pessoas, "Deteção de pessoas"], [k.adulteracao, "Aviso se a taparem ou mexerem"], [k.led, "Luz de estado da câmara"]].filter((x) => x[0]);
+    if (!itens.length) { caixa.innerHTML = '<p class="ha-nota">Sem opções de deteção nesta câmara.</p>'; return; }
+    itens.forEach(([eid, txt]) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "interruptor"; b.setAttribute("role", "switch"); b.dataset.eid = eid;
+      b.innerHTML = '<span></span><span class="trilho"></span>'; b.firstChild.textContent = txt;
+      b.addEventListener("click", () => {
+        const on = q.ha.estado(eid)?.state === "on";
+        b.setAttribute("aria-checked", String(!on));
+        q.ha.chamar("switch", on ? "turn_off" : "turn_on", { entity_id: eid }).catch(() => { b.setAttribute("aria-checked", String(on)); falhou(); });
+      });
+      caixa.appendChild(b);
+    });
+  }
+  const falhou = () => q.aviso({ ic: "info", t: "Não foi possível", d: "O Home Assistant não respondeu. Tenta outra vez.", dur: 3000 });
+  function privadoReal() {
+    const k = real.k;
+    if (k.privado) return q.ha.estado(k.privado)?.state === "off";       // interruptor da câmara desligado = lente tapada
+    return !!real.privadoLocal;
+  }
+  function atualizarReal() {
+    if (!real) return;
+    const k = real.k, est = (eid) => q.ha.estado(eid)?.state;
+    marcar("sirene", est(k.sirene) === "on"); $("cam-borda").hidden = est(k.sirene) !== "on";
+    marcar("luz", est(k.luz) === "on");
+    const priv = privadoReal(); const mudou = priv !== !!estado.privado;
+    marcar("privado", priv);
+    $("cam-capa").hidden = !priv; $("cam-pill").textContent = priv ? "PRIVADO" : "AO VIVO";
+    ["foto", "sirene", "luz"].forEach((a) => { if (!botao(a).hasAttribute("data-indisp")) botao(a).disabled = priv; });
+    document.querySelectorAll("#cam-reais [data-eid]").forEach((b) => b.setAttribute("aria-checked", String(est(b.dataset.eid) === "on")));
+    K.privado(cam, priv);
+    const ind = est(k.camera) === "unavailable";
+    $("cam-sub").textContent = ind ? "Sem ligação à câmara" : "Ao vivo · Home Assistant";
+    if (mudou && aberto) { if (priv) pararVideo(); else iniciarVideo(); }
+  }
+  async function acaoReal(a) {
+    const k = real.k, eid = real.eid;
+    if (a === "foto") {
+      const f = $("cam-flash"); f.classList.remove("dispara"); void f.offsetWidth; f.classList.add("dispara");
+      const l = document.createElement("a"); l.href = q.ha.foto(eid); l.target = "_blank"; l.rel = "noopener"; document.body.appendChild(l); l.click(); l.remove();
+      q.aviso({ ic: "cam", t: "Foto da câmara", d: "Abriu numa janela nova. Mantém premido para a guardar.", dur: 3600 });
+    } else if (a === "sirene") {
+      const on = q.ha.estado(k.sirene)?.state === "on";
+      q.ha.chamar("siren", on ? "turn_off" : "turn_on", { entity_id: k.sirene }).catch(falhou);
+    } else if (a === "luz") {
+      const on = q.ha.estado(k.luz)?.state === "on";
+      q.ha.chamar("light", on ? "turn_off" : "turn_on", { entity_id: k.luz }).catch(falhou);
+    } else if (a === "privado") {
+      const priv = privadoReal();
+      if (k.privado) q.ha.chamar("switch", priv ? "turn_on" : "turn_off", { entity_id: k.privado }).catch(falhou);
+      else q.ha.chamar("camera", priv ? "turn_on" : "turn_off", { entity_id: eid }).then(() => { real.privadoLocal = !priv; atualizarReal(); }).catch(falhou);
+    }
+  }
+  // ---- vídeo: HLS (nativo no iPhone, hls.js nos outros) e, se falhar, MJPEG ----
+  function carregarHls() {
+    if (window.Hls) return Promise.resolve();
+    return new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js";
+      s.onload = res; s.onerror = rej; document.head.appendChild(s);
+    });
+  }
+  function pararVideo() {
+    clearTimeout(tVideo);
+    if (hls) { try { hls.destroy(); } catch (_) {} hls = null; }
+    video.onplaying = video.onerror = null;
+    video.removeAttribute("src"); try { video.load(); } catch (_) {}
+    video.hidden = true;
+    mjpeg.onload = mjpeg.onerror = null; mjpeg.removeAttribute("src"); mjpeg.hidden = true;
+  }
+  function pronto() { clearTimeout(tVideo); $("cam-carrega").hidden = true; }
+  function usarMjpeg() {
+    if (!real || !aberto) return;
+    pararVideo();
+    mjpeg.hidden = false;
+    mjpeg.onload = pronto;
+    mjpeg.onerror = () => { $("cam-carrega").hidden = false; $("cam-carrega").querySelector("span").textContent = "A câmara não está a enviar imagem."; };
+    mjpeg.src = q.ha.mjpeg(real.eid);
+    tVideo = setTimeout(pronto, 4000);
+  }
+  async function iniciarVideo() {
+    if (!real || !aberto) return;
+    pararVideo();
+    if (privadoReal()) { $("cam-carrega").hidden = true; return; }
+    $("cam-carrega").hidden = false; $("cam-carrega").querySelector("span").textContent = "A ligar à câmara…";
+    const meu = real;
+    let url;
+    try { url = await q.ha.stream(meu.eid); } catch (_) { return usarMjpeg(); }
+    if (real !== meu || !aberto) return;
+    video.hidden = false;
+    video.muted = $("cam-som").getAttribute("aria-pressed") !== "true";
+    video.onplaying = pronto;
+    tVideo = setTimeout(usarMjpeg, 15000);
+    const nativo = video.canPlayType("application/vnd.apple.mpegurl");
+    const viaHls = async () => {
+      try { await carregarHls(); } catch (_) { return usarMjpeg(); }
+      if (real !== meu || !aberto) return;
+      if (!window.Hls || !window.Hls.isSupported()) return usarMjpeg();
+      hls = new window.Hls({ lowLatencyMode: true, backBufferLength: 10 });
+      hls.on(window.Hls.Events.ERROR, (_, d) => { if (d.fatal) usarMjpeg(); });
+      hls.loadSource(url); hls.attachMedia(video);
+      video.play().catch(() => {});
+    };
+    if (nativo) {
+      video.onerror = () => { video.onerror = null; viaHls(); };
+      video.src = url; video.play().catch(() => {});
+    } else viaHls();
+  }
+  async function abrirReal(c) {
+    $("cam-carrega").hidden = false;
+    desligarOuvinte = q.ha.ouvir((m) => {
+      if (!real) return;
+      if (m.tipo === "estado" && Object.values(real.k).includes(m.entity_id)) atualizarReal();
+      if (m.tipo === "ligacao" && !q.ha.ligado()) { $("cam-sub").textContent = "Sem ligação ao Home Assistant"; }
+    });
+    iniciarVideo();
+  }
+  $("cam-som").addEventListener("click", () => { video.muted = $("cam-som").getAttribute("aria-pressed") !== "true"; });
+  function fecharReal() { if (desligarOuvinte) { desligarOuvinte(); desligarOuvinte = null; } pararVideo(); real = null; tela.hidden = false; }
   q.abrirCamara = abrir;
   const pararAntes = q.parar;
   q.parar = () => { fechar(); pararAntes(); };
+})();
+</script>
+
+
+<style>
+/* ---------- ligação ao Home Assistant ---------- */
+.ha-estado { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--line); background: rgba(241, 235, 221, 0.03); }
+.ha-estado .ponto { background: var(--muted); box-shadow: 0 0 0 4px rgba(179, 170, 148, 0.16); }
+.ha-estado.ligado .ponto { background: var(--ok); box-shadow: 0 0 0 4px rgba(169, 209, 143, 0.18); }
+.ha-estado.a-ligar .ponto { background: var(--amber); animation: pulso 0.9s ease-in-out infinite; }
+.ha-estado.erro .ponto { background: var(--alerta); box-shadow: 0 0 0 4px rgba(255, 122, 102, 0.2); }
+.ha-estado div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ha-estado b { font-size: 0.95rem; overflow-wrap: anywhere; }
+.ha-estado span:not(.ponto) { font-size: 0.82rem; color: var(--muted); }
+.ha-form { display: flex; flex-direction: column; gap: 12px; }
+.ha-sub { margin: 4px 0 0; font-family: var(--display); font-size: 1rem; }
+.ha-nota { margin: 0; font-size: 0.82rem; color: var(--muted); line-height: 1.45; }
+.ha-cams { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.ha-cam { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-top: 1px solid rgba(58, 69, 50, 0.7); }
+.ha-cam:first-child { border-top: 0; }
+.ha-cam label { font-weight: 700; font-size: 0.9rem; }
+.ha-cam select { height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(241, 235, 221, 0.05); color: var(--text); font: inherit; }
+.ha-cam .det { font-size: 0.78rem; color: var(--muted); }
+.ha-ajuda { border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; background: rgba(241, 235, 221, 0.02); }
+.ha-ajuda summary { cursor: pointer; font-weight: 700; font-size: 0.9rem; }
+.ha-ajuda ol { margin: 10px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; line-height: 1.45; }
+.ha-ajuda code { font-size: 0.8rem; background: rgba(241, 235, 221, 0.08); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
+.ha-aviso-site { margin: 0; padding: 10px 12px; border-radius: 12px; background: rgba(242, 196, 109, 0.1); color: var(--amber); font-size: 0.84rem; line-height: 1.45; }
+</style>
+
+<div class="folha" id="folha-ha" hidden>
+  <div class="folha-in" role="dialog" aria-modal="true" aria-labelledby="ha-t">
+    <div class="folha-cab">
+      <h2 id="ha-t">Home Assistant</h2>
+      <button class="fechar" type="button" data-fechar-ha aria-label="Fechar"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l10 10M13 3 3 13"/></svg></button>
+    </div>
+    <div class="ha-estado" id="ha-estado"><span class="ponto"></span><div><b id="ha-estado-t">Não ligado</b><span id="ha-estado-d">As câmaras mostram a imagem simulada.</span></div></div>
+    <p class="ha-aviso-site" id="ha-aviso-site" hidden>Para ligar ao Home Assistant, abre a app pelo link público ou pela app instalada no telemóvel.</p>
+
+    <form class="ha-form" id="ha-form" novalidate>
+      <div class="campo">
+        <label for="ha-url">Endereço do Home Assistant</label>
+        <input id="ha-url" type="url" inputmode="url" placeholder="https://a-tua-quinta.ui.nabu.casa" autocapitalize="none" autocomplete="url" spellcheck="false">
+        <span class="ajuda">O endereço de acesso remoto. Tem de começar por https://</span>
+      </div>
+      <p class="erro" id="ha-erro"></p>
+      <button class="btn-prim" type="submit" id="ha-entrar">Entrar com a conta do Home Assistant</button>
+      <button class="ligacao" type="button" id="ha-token-abrir">Usar um token de acesso em vez disso</button>
+      <div class="campo" id="ha-token-bloco" hidden>
+        <label for="ha-token">Token de acesso de longa duração</label>
+        <input id="ha-token" type="password" autocomplete="off" spellcheck="false">
+        <span class="ajuda">No Home Assistant: o teu perfil → Segurança → Tokens de acesso de longa duração → Criar token.</span>
+        <button class="btn-sec" type="button" id="ha-token-ligar" style="margin-top:6px">Ligar com o token</button>
+      </div>
+    </form>
+
+    <section id="ha-ligado" hidden style="display:flex;flex-direction:column;gap:12px">
+      <h3 class="ha-sub">Câmaras</h3>
+      <p class="ha-nota">Escolhe que câmara do Home Assistant corresponde a cada câmara do mapa. As que ficarem em «Simulação» continuam com a imagem de demonstração.</p>
+      <div class="ha-cams" id="ha-cams"></div>
+      <button class="btn-remover" type="button" id="ha-desligar">Desligar do Home Assistant</button>
+    </section>
+
+    <details class="ha-ajuda" id="ha-ajuda">
+      <summary>O que é preciso no Home Assistant</summary>
+      <ol>
+        <li>As câmaras Tapo juntas na integração <b>TP-Link Smart Home</b>, com a conta de câmara criada na app Tapo e a opção <b>Live view</b> ligada.</li>
+        <li>Acesso remoto seguro (Home Assistant Cloud ou Cloudflare Tunnel), para teres um endereço <code>https://</code>.</li>
+        <li>Este site autorizado no <code>configuration.yaml</code>:<br><code>http:</code><br><code>&nbsp;&nbsp;cors_allowed_origins:</code><br><code>&nbsp;&nbsp;&nbsp;&nbsp;- <span id="ha-origem">https://…</span></code><br>e reiniciar o Home Assistant.</li>
+      </ol>
+    </details>
+  </div>
+</div>
+
+<script>
+(() => {
+  const q = window.quinta;
+  const $ = (id) => document.getElementById(id);
+  const CHAVE = "quinta.ha.v1", PENDENTE = "quinta.ha.pendente";
+  const ON_OFF = 1;                                       // CameraEntityFeature.ON_OFF
+  const proprioSite = !!document.querySelector('link[rel="manifest"]') || location.hostname === "localhost";
+
+  // ---------------- guardar (só neste dispositivo) ----------------
+  const lerJSON = (k) => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (_) { return null; } };
+  const gravarJSON = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
+  let cfg = lerJSON(CHAVE) || { url: "", auth: null, cams: {} };
+  const gravar = () => gravarJSON(CHAVE, cfg);
+  const clientId = () => location.origin + location.pathname.replace(/index\.html$/, "");
+  const limparUrl = (u) => u.trim().replace(/\/+$/, "").replace(/\/(lovelace|config|dashboard).*$/, "");
+
+  // ---------------- estado da ligação ----------------
+  let estadoLig = "desligado", detalhe = "";
+  const ouvintes = new Set();
+  const avisarTodos = (m) => {
+    ouvintes.forEach((f) => { try { f(m); } catch (_) {} });
+    if (m.tipo !== "estado") try { q.controloCam.atualizarLista(); } catch (_) {}
+  };
+  function definirEstado(e, d = "") { estadoLig = e; detalhe = d; desenharFolha(); avisarTodos({ tipo: "ligacao" }); }
+
+  // ---------------- tokens ----------------
+  async function pedirToken(corpo) {
+    let r;
+    try {
+      r = await fetch(`${cfg.url}/auth/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(corpo) });
+    } catch (_) {
+      const e = new Error("cors"); e.cors = true; throw e;
+    }
+    if (!r.ok) { const e = new Error("token " + r.status); e.status = r.status; throw e; }
+    return r.json();
+  }
+  function guardarTokens(t) {
+    cfg.auth = { tipo: "oauth", access: t.access_token, refresh: t.refresh_token || cfg.auth?.refresh, expira: Date.now() + (t.expires_in || 1800) * 1000 - 60000 };
+    gravar();
+  }
+  async function tokenValido() {
+    if (!cfg.auth) throw new Error("sem sessão");
+    if (cfg.auth.tipo === "token" || Date.now() < cfg.auth.expira) return cfg.auth.access;
+    guardarTokens(await pedirToken({ grant_type: "refresh_token", refresh_token: cfg.auth.refresh, client_id: clientId() }));
+    return cfg.auth.access;
+  }
+  function erroLegivel(e) {
+    if (e && e.cors) return "O Home Assistant não respondeu a este site. Confirma o endereço e que este site está em cors_allowed_origins (ver «O que é preciso»).";
+    if (e && (e.status === 400 || e.status === 401 || e.status === 403)) return "A sessão do Home Assistant terminou. Entra outra vez.";
+    return "Não foi possível ligar ao Home Assistant.";
+  }
+
+  // ---------------- entrar com a conta do HA (OAuth) ----------------
+  function validarUrl() {
+    const u = limparUrl($("ha-url").value);
+    if (!/^https?:\/\//.test(u)) return [null, "Escreve o endereço completo, a começar por https://"];
+    if (location.protocol === "https:" && u.startsWith("http://")) return [null, "Tem de ser um endereço https://. Os endereços locais (http://192.168…) só funcionam dentro de casa e o telemóvel bloqueia-os nesta app."];
+    return [u, ""];
+  }
+  $("ha-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const [u, erro] = validarUrl(); $("ha-erro").textContent = erro; if (!u) return;
+    const estado = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+    gravarJSON(PENDENTE, { estado, url: u, t: Date.now() });
+    const cid = encodeURIComponent(clientId());
+    location.href = `${u}/auth/authorize?response_type=code&client_id=${cid}&redirect_uri=${cid}&state=${estado}`;
+  });
+  async function voltaDoLogin() {
+    const ps = new URLSearchParams(location.search);
+    if (!ps.get("code") || !ps.get("state")) return;
+    const pend = lerJSON(PENDENTE); gravarJSON(PENDENTE, null);
+    history.replaceState(null, "", clientId());
+    if (!pend || pend.estado !== ps.get("state")) return;
+    cfg.url = pend.url;
+    try {
+      guardarTokens(await pedirToken({ grant_type: "authorization_code", code: ps.get("code"), client_id: clientId() }));
+      sessionStorage.setItem("quinta.ha.abrir", "1");
+      ligar();
+    } catch (e) { definirEstado("erro", erroLegivel(e)); }
+  }
+
+  // ---------------- token de longa duração ----------------
+  $("ha-token-abrir").addEventListener("click", () => { $("ha-token-bloco").hidden = !$("ha-token-bloco").hidden; });
+  $("ha-token-ligar").addEventListener("click", () => {
+    const [u, erro] = validarUrl(); $("ha-erro").textContent = erro; if (!u) return;
+    const tk = $("ha-token").value.trim(); if (!tk) { $("ha-erro").textContent = "Cola o token."; return; }
+    cfg.url = u; cfg.auth = { tipo: "token", access: tk }; gravar(); $("ha-token").value = "";
+    ligar();
+  });
+
+  // ---------------- WebSocket ----------------
+  let ws = null, nId = 1, intencional = false, espera = 2000, tReligar = 0;
+  const pendentes = new Map();
+  const estados = {}, registo = {};
+  function pedir(msg) {
+    return new Promise((res, rej) => {
+      if (!ws || ws.readyState !== 1) return rej(new Error("sem ligação"));
+      const id = nId++; pendentes.set(id, { res, rej });
+      ws.send(JSON.stringify({ ...msg, id }));
+      setTimeout(() => { if (pendentes.has(id)) { pendentes.delete(id); rej(new Error("tempo")); } }, 15000);
+    });
+  }
+  async function ligar() {
+    if (!cfg.url || !cfg.auth) return definirEstado("desligado");
+    if (!proprioSite) return definirEstado("desligado");
+    clearTimeout(tReligar);
+    if (ws) { intencional = true; try { ws.close(); } catch (_) {} }
+    definirEstado("a-ligar", cfg.url);
+    let token;
+    try { token = await tokenValido(); } catch (e) { return definirEstado("erro", erroLegivel(e)); }
+    intencional = false;
+    const s = new WebSocket(cfg.url.replace(/^http/, "ws") + "/api/websocket");
+    ws = s;
+    let tentouRenovar = false;
+    s.onmessage = async (ev) => {
+      const m = JSON.parse(ev.data);
+      if (m.type === "auth_required") s.send(JSON.stringify({ type: "auth", access_token: token }));
+      else if (m.type === "auth_invalid") {
+        if (cfg.auth.tipo === "oauth" && !tentouRenovar) { tentouRenovar = true; cfg.auth.expira = 0; intencional = true; s.close(); return ligar(); }
+        intencional = true; s.close(); definirEstado("erro", cfg.auth.tipo === "token" ? "O token não é válido." : "A sessão do Home Assistant terminou. Entra outra vez.");
+      } else if (m.type === "auth_ok") {
+        espera = 2000;
+        try {
+          const [st, reg] = await Promise.all([
+            pedir({ type: "get_states" }),
+            pedir({ type: "config/entity_registry/list_for_display" }).catch(() => ({ entities: [] })),
+          ]);
+          for (const k in estados) delete estados[k];
+          st.forEach((x) => (estados[x.entity_id] = x));
+          for (const k in registo) delete registo[k];
+          (reg.entities || []).forEach((x) => (registo[x.ei] = x));
+          await pedir({ type: "subscribe_events", event_type: "state_changed" });
+          definirEstado("ligado", cfg.url);
+          if (!Object.keys(cfg.cams).length) autoLigarCamaras();
+          if (sessionStorage.getItem("quinta.ha.abrir")) { sessionStorage.removeItem("quinta.ha.abrir"); abrirFolha(); }
+        } catch (e) { definirEstado("erro", "Ligado, mas sem resposta do Home Assistant."); }
+      } else if (m.type === "result") {
+        const p = pendentes.get(m.id); if (!p) return; pendentes.delete(m.id);
+        m.success ? p.res(m.result) : p.rej(Object.assign(new Error(m.error?.message || "erro"), { codigo: m.error?.code }));
+      } else if (m.type === "event" && m.event?.event_type === "state_changed") {
+        const d = m.event.data;
+        if (d.new_state) estados[d.entity_id] = d.new_state; else delete estados[d.entity_id];
+        avisarTodos({ tipo: "estado", entity_id: d.entity_id });
+      }
+    };
+    s.onclose = () => {
+      if (ws !== s) return;
+      pendentes.forEach((p) => p.rej(new Error("fechou"))); pendentes.clear();
+      if (intencional) return;
+      definirEstado("a-ligar", "A tentar outra vez…");
+      tReligar = setTimeout(ligar, espera); espera = Math.min(30000, espera * 2);
+    };
+    s.onerror = () => {};
+  }
+  function desligar() {
+    intencional = true; clearTimeout(tReligar);
+    if (ws) try { ws.close(); } catch (_) {}
+    ws = null; cfg = { url: cfg.url, auth: null, cams: {} }; gravar();
+    definirEstado("desligado");
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && cfg.auth && estadoLig !== "ligado" && estadoLig !== "a-ligar") ligar();
+  });
+
+  // ---------------- câmaras do HA ----------------
+  const camarasHA = () => Object.values(estados).filter((s) => s.entity_id.startsWith("camera."));
+  const nomeDe = (eid) => estados[eid]?.attributes?.friendly_name || eid;
+  function controlos(camEid) {
+    const r = registo[camEid], dev = r && r.di;
+    const doDisp = dev ? Object.values(registo).filter((x) => x.di === dev && estados[x.ei]) : [];
+    const porTk = (dom, tk) => doDisp.find((x) => x.ei.startsWith(dom + ".") && x.tk === tk)?.ei;
+    const porDom = (dom, filtro = () => true) => doDisp.find((x) => x.ei.startsWith(dom + ".") && filtro(x))?.ei;
+    const base = camEid.replace(/^camera\./, "").replace(/_live_view$/, "");
+    const ex = (eid) => (estados[eid] ? eid : undefined);
+    const cam = estados[camEid];
+    return {
+      camera: camEid,
+      panEsq: porTk("button", "pan_left") || ex(`button.${base}_pan_left`),
+      panDir: porTk("button", "pan_right") || ex(`button.${base}_pan_right`),
+      tiltCima: porTk("button", "tilt_up") || ex(`button.${base}_tilt_up`),
+      tiltBaixo: porTk("button", "tilt_down") || ex(`button.${base}_tilt_down`),
+      privado: porDom("switch", (x) => !x.tk || x.tk === "state") || ex(`switch.${base}`),
+      privadoCamera: cam && (cam.attributes.supported_features & ON_OFF) ? camEid : undefined,
+      sirene: porDom("siren") || ex(`siren.${base}`),
+      luz: porDom("light"),
+      movimento: porTk("switch", "motion_detection") || ex(`switch.${base}_motion_detection`),
+      pessoas: porTk("switch", "person_detection") || ex(`switch.${base}_person_detection`),
+      led: porTk("switch", "led") || ex(`switch.${base}_led`),
+      adulteracao: porTk("switch", "tamper_detection") || ex(`switch.${base}_tamper_detection`),
+    };
+  }
+  function autoLigarCamaras() {
+    // primeira vez: sugere ligações pela semelhança dos nomes (Pátio ↔ «Tapo Pátio», etc.)
+    const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    const livres = new Set(camarasHA().map((s) => s.entity_id));
+    q.controloCam.cams.filter((c) => !c.sugestao && !cfg.cams[c.id]).forEach((c) => {
+      const chave = norm(c.nome.replace(/^Câmara (do |da |de )?/i, ""));
+      const achou = [...livres].find((eid) => norm(nomeDe(eid) + " " + eid).includes(chave));
+      if (achou) { cfg.cams[c.id] = achou; livres.delete(achou); }
+    });
+    gravar(); desenharFolha(); avisarTodos({ tipo: "ligacoes" });
+  }
+
+  // ---------------- folha ----------------
+  function abrirFolha() {
+    document.querySelectorAll(".folha").forEach((f) => (f.hidden = f.id !== "folha-ha"));
+    $("ha-url").value = cfg.url || "";
+    $("ha-erro").textContent = "";
+    desenharFolha();
+  }
+  function fecharFolha() { $("folha-ha").hidden = true; }
+  $("folha-ha").addEventListener("click", (e) => { if (e.target === $("folha-ha") || e.target.closest("[data-fechar-ha]")) fecharFolha(); });
+  function desenharFolha() {
+    const caixa = $("ha-estado"); if (!caixa) return;
+    caixa.className = "ha-estado " + estadoLig;
+    const host = cfg.url ? cfg.url.replace(/^https?:\/\//, "") : "";
+    $("ha-estado-t").textContent = { ligado: `Ligado a ${host}`, "a-ligar": "A ligar…", erro: "Sem ligação", desligado: "Não ligado" }[estadoLig];
+    $("ha-estado-d").textContent = estadoLig === "ligado" ? `${camarasHA().length} câmara(s) encontradas no Home Assistant.`
+      : estadoLig === "erro" ? detalhe : estadoLig === "a-ligar" ? (detalhe || host) : "As câmaras mostram a imagem simulada.";
+    $("ha-aviso-site").hidden = proprioSite;
+    $("ha-form").hidden = estadoLig === "ligado" || !proprioSite;
+    $("ha-ligado").hidden = estadoLig !== "ligado";
+    $("ha-origem").textContent = location.origin;
+    if (estadoLig === "ligado") desenharCams();
+    const item = $("m-ha");
+    if (item) item.querySelector(".estado").textContent = estadoLig === "ligado" ? "Ligado" : estadoLig === "a-ligar" ? "A ligar…" : estadoLig === "erro" ? "Erro" : "Não ligado";
+  }
+  function desenharCams() {
+    const lista = $("ha-cams"); lista.innerHTML = "";
+    const opcoes = camarasHA().sort((a, b) => nomeDe(a.entity_id).localeCompare(nomeDe(b.entity_id)));
+    q.controloCam.cams.filter((c) => !c.sugestao).forEach((c) => {
+      const linha = document.createElement("div"); linha.className = "ha-cam";
+      const id = `ha-sel-${c.id}`;
+      linha.innerHTML = `<label for="${id}"></label><select id="${id}"><option value="">Simulação</option></select><span class="det"></span>`;
+      linha.querySelector("label").textContent = c.nome;
+      const sel = linha.querySelector("select");
+      opcoes.forEach((s) => { const o = document.createElement("option"); o.value = s.entity_id; o.textContent = nomeDe(s.entity_id); sel.appendChild(o); });
+      sel.value = cfg.cams[c.id] && estados[cfg.cams[c.id]] ? cfg.cams[c.id] : "";
+      const det = () => {
+        const eid = sel.value; if (!eid) return "Mostra a imagem simulada.";
+        const k = controlos(eid);
+        const tem = [k.panEsq && "rodar", (k.privado || k.privadoCamera) && "modo privado", k.sirene && "sirene", k.luz && "holofote", (k.movimento || k.pessoas) && "deteções"].filter(Boolean);
+        return `${eid}${tem.length ? " · " + tem.join(", ") : ""}`;
+      };
+      linha.querySelector(".det").textContent = det();
+      sel.addEventListener("change", () => {
+        if (sel.value) cfg.cams[c.id] = sel.value; else delete cfg.cams[c.id];
+        gravar(); linha.querySelector(".det").textContent = det(); avisarTodos({ tipo: "ligacoes" });
+      });
+      lista.appendChild(linha);
+    });
+  }
+  $("ha-desligar").addEventListener("click", () => { desligar(); abrirFolha(); });
+
+  // item no menu da conta (só administradores)
+  const menu = document.querySelector("#folha-conta .menu");
+  if (menu) {
+    const b = document.createElement("button"); b.type = "button"; b.id = "m-ha";
+    b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5M5.5 9.5V20h13V9.5"/><circle cx="12" cy="14" r="2"/><path d="M12 16v4"/></svg>Home Assistant<span class="estado">Não ligado</span>`;
+    menu.insertBefore(b, $("m-instalar"));
+    b.addEventListener("click", abrirFolha);
+    $("conta").addEventListener("click", () => { const u = q.utilizador && q.utilizador(); b.hidden = !(u && u.admin); desenharFolha(); });
+  }
+
+  // ---------------- serviço para o resto da app ----------------
+  q.ha = {
+    ligado: () => estadoLig === "ligado",
+    base: () => cfg.url,
+    camaraDe: (mapId) => (estadoLig === "ligado" && cfg.cams[mapId] && estados[cfg.cams[mapId]] ? cfg.cams[mapId] : null),
+    controlos, estado: (eid) => estados[eid], nome: nomeDe,
+    chamar: (dominio, servico, dados) => pedir({ type: "call_service", domain: dominio, service: servico, service_data: dados }),
+    async stream(eid) { const r = await pedir({ type: "camera/stream", entity_id: eid, format: "hls" }); return cfg.url + r.url; },
+    foto: (eid) => `${cfg.url}/api/camera_proxy/${eid}?token=${estados[eid]?.attributes?.access_token}`,
+    mjpeg: (eid) => `${cfg.url}/api/camera_proxy_stream/${eid}?token=${estados[eid]?.attributes?.access_token}`,
+    ouvir(f) { ouvintes.add(f); return () => ouvintes.delete(f); },
+    abrir: abrirFolha,
+  };
+  const pararAntes = q.parar;
+  q.parar = () => { fecharFolha(); pararAntes(); };
+
+  voltaDoLogin();
+  if (cfg.auth && !new URLSearchParams(location.search).get("code")) ligar();
 })();
 </script>
 </body></html>

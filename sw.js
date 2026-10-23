@@ -1,5 +1,5 @@
 // Quinta: abre mesmo sem rede (usa a última versão guardada) e vai buscar a nova quando há ligação.
-const CACHE = "quinta-v4";
+const CACHE = "quinta-v5";
 const BASE = ["./", "manifest.webmanifest", "icone-180.png", "icone-192.png", "icone-512.png"];
 
 self.addEventListener("install", (e) => {
